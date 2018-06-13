@@ -54,8 +54,8 @@ type NeutrinoNotifier struct {
 	spendClientCounter uint64 // To be used atomically.
 	epochClientCounter uint64 // To be used atomically.
 
-	heightMtx  sync.RWMutex
-	bestHeight uint32
+	bestBlockMtx sync.RWMutex
+	bestBlock    *chainntnfs.BlockEpoch
 
 	p2pNode   *neutrino.ChainService
 	chainView neutrino.Rescan
@@ -119,14 +119,15 @@ func (n *NeutrinoNotifier) Start() error {
 	// to register a chain view, the rescan state will be rewound
 	// accordingly.
 	bestHeader, bestHeight, err := n.p2pNode.BlockHeaders.ChainTip()
+	bestHash := bestHeader.BlockHash()
 	if err != nil {
 		return err
 	}
 	startingPoint := &waddrmgr.BlockStamp{
 		Height: int32(bestHeight),
-		Hash:   bestHeader.BlockHash(),
+		Hash:   bestHash,
 	}
-	n.bestHeight = bestHeight
+	n.bestBlock = &chainntnfs.BlockEpoch{Height: int32(bestHeight), Hash: &bestHash}
 
 	// Next, we'll create our set of rescan options. Currently it's
 	// required that a user MUST set an addr/outpoint/txid when creating a
@@ -302,9 +303,9 @@ func (n *NeutrinoNotifier) notificationDispatcher() {
 				// If the notification can be partially or
 				// fully dispatched, then we can skip the first
 				// phase for ntfns.
-				n.heightMtx.RLock()
-				currentHeight := n.bestHeight
-				n.heightMtx.RUnlock()
+				n.bestBlockMtx.RLock()
+				currentHeight := uint32(n.bestBlock.Height)
+				n.bestBlockMtx.RUnlock()
 
 				// Lookup whether the transaction is already included in the
 				// active chain.
@@ -341,17 +342,17 @@ func (n *NeutrinoNotifier) notificationDispatcher() {
 		case item := <-n.chainUpdates.ChanOut():
 			update := item.(*filteredBlock)
 			if update.connect {
-				n.heightMtx.Lock()
-				if update.height != n.bestHeight+1 {
+				n.bestBlockMtx.Lock()
+				if update.height != uint32(n.bestBlock.Height)+1 {
 					chainntnfs.Log.Warnf("Received blocks out of order: "+
 						"current height=%d, new height=%d",
-						n.bestHeight, update.height)
-					n.heightMtx.Unlock()
+						n.bestBlock.Height, update.height)
+					n.bestBlockMtx.Unlock()
 					continue
 				}
 
-				n.bestHeight = update.height
-				n.heightMtx.Unlock()
+				n.bestBlock.Height = int32(update.height)
+				n.bestBlockMtx.Unlock()
 
 				chainntnfs.Log.Infof("New block: height=%v, sha=%v",
 					update.height, update.hash)
@@ -363,17 +364,17 @@ func (n *NeutrinoNotifier) notificationDispatcher() {
 				continue
 			}
 
-			n.heightMtx.Lock()
-			if update.height != n.bestHeight {
+			n.bestBlockMtx.Lock()
+			if update.height != uint32(n.bestBlock.Height) {
 				chainntnfs.Log.Warnf("Received blocks out of order: "+
 					"current height=%d, disconnected height=%d",
-					n.bestHeight, update.height)
-				n.heightMtx.Unlock()
+					n.bestBlock.Height, update.height)
+				n.bestBlockMtx.Unlock()
 				continue
 			}
 
-			n.bestHeight = update.height - 1
-			n.heightMtx.Unlock()
+			n.bestBlock.Height = int32(update.height) - 1
+			n.bestBlockMtx.Unlock()
 
 			chainntnfs.Log.Infof("Block disconnected from main chain: "+
 				"height=%v, sha=%v", update.height, update.hash)
@@ -569,9 +570,9 @@ type spendCancel struct {
 func (n *NeutrinoNotifier) RegisterSpendNtfn(outpoint *wire.OutPoint,
 	heightHint uint32, _ bool) (*chainntnfs.SpendEvent, error) {
 
-	n.heightMtx.RLock()
-	currentHeight := n.bestHeight
-	n.heightMtx.RUnlock()
+	n.bestBlockMtx.RLock()
+	currentHeight := uint32(n.bestBlock.Height)
+	n.bestBlockMtx.RUnlock()
 
 	chainntnfs.Log.Infof("New spend notification for outpoint=%v, "+
 		"height_hint=%v", outpoint, heightHint)
@@ -614,9 +615,9 @@ func (n *NeutrinoNotifier) RegisterSpendNtfn(outpoint *wire.OutPoint,
 	// attempt to fetch the utxo fromt the chain. If we're behind, then we
 	// may miss a notification dispatch.
 	for {
-		n.heightMtx.RLock()
-		currentHeight := n.bestHeight
-		n.heightMtx.RUnlock()
+		n.bestBlockMtx.RLock()
+		currentHeight := uint32(n.bestBlock.Height)
+		n.bestBlockMtx.RUnlock()
 
 		if currentHeight < heightHint {
 			time.Sleep(time.Millisecond * 200)
