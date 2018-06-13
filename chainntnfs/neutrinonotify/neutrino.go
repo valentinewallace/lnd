@@ -834,7 +834,7 @@ func (n *NeutrinoNotifier) catchUpOnBlocks(bestBlock *chainntnfs.BlockEpoch) err
 
 	// If a reorg causes the hash to be incorrect, start from the bestBlock's height
 	// Doesn't handle the case where other past blocks are incorrect
-	if hashAtBestHeight != *bestBlock.Hash {
+	if &hashAtBestHeight != bestBlock.Hash {
 		startingHeight = bestBlock.Height
 	}
 	for height := startingHeight; height <= int32(currHeight); height++ {

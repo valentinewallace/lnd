@@ -638,6 +638,34 @@ func testBlockEpochNotification(miner *rpctest.Harness,
 	case <-time.After(30 * time.Second):
 		t.Fatalf("all notifications not sent")
 	}
+	// Test scenario where a subsystem misses block notifications
+	for i := 0; i < numClients; i++ {
+		// Register such that each client is notified for every past block
+		epochClient, err := notifier.RegisterBlockEpochNtfn(&chainntnfs.BlockEpoch{Height: 1, Hash: nil})
+		if err != nil {
+			t.Fatalf("unable to register for epoch notification: %v", err)
+		}
+
+		wg.Add(numBlocks)
+		go func() {
+			for i := 0; i < numBlocks; i++ {
+				<-epochClient.Epochs
+				wg.Done()
+			}
+		}()
+	}
+
+	epochsSent = make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(epochsSent)
+	}()
+
+	select {
+	case <-epochsSent:
+	case <-time.After(30 * time.Second):
+		t.Fatalf("all historical notifications not sent")
+	}
 }
 
 func testMultiClientConfirmationNotification(miner *rpctest.Harness,
