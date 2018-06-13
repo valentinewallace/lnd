@@ -722,6 +722,8 @@ type blockEpochRegistration struct {
 
 	cancelChan chan struct{}
 
+	bestBlock *chainntnfs.BlockEpoch
+
 	wg sync.WaitGroup
 }
 
@@ -739,6 +741,7 @@ func (n *NeutrinoNotifier) RegisterBlockEpochNtfn(bestBlock *chainntnfs.BlockEpo
 		epochChan:  make(chan *chainntnfs.BlockEpoch, 20),
 		cancelChan: make(chan struct{}),
 		epochID:    atomic.AddUint64(&n.epochClientCounter, 1),
+		bestBlock:  bestBlock,
 	}
 	reg.epochQueue.Start()
 

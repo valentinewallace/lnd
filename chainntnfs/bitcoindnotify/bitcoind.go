@@ -737,6 +737,8 @@ type blockEpochRegistration struct {
 
 	epochQueue *chainntnfs.ConcurrentQueue
 
+	bestBlock *chainntnfs.BlockEpoch
+
 	cancelChan chan struct{}
 
 	wg sync.WaitGroup
@@ -757,6 +759,7 @@ func (b *BitcoindNotifier) RegisterBlockEpochNtfn(bestBlock *chainntnfs.BlockEpo
 		epochChan:  make(chan *chainntnfs.BlockEpoch, 20),
 		cancelChan: make(chan struct{}),
 		epochID:    atomic.AddUint64(&b.epochClientCounter, 1),
+		bestBlock:  bestBlock,
 	}
 	reg.epochQueue.Start()
 
