@@ -335,6 +335,7 @@ func (n *NeutrinoNotifier) notificationDispatcher() {
 			case *blockEpochRegistration:
 				chainntnfs.Log.Infof("New block epoch subscription")
 				n.blockEpochClients[msg.epochID] = msg
+				n.catchUpOnBlocks(msg.bestBlock)
 			}
 
 		case item := <-n.chainUpdates.ChanOut():
@@ -811,4 +812,39 @@ func (n *NeutrinoNotifier) RegisterBlockEpochNtfn(bestBlock *chainntnfs.BlockEpo
 			},
 		}, nil
 	}
+}
+
+func (n *NeutrinoNotifier) catchUpOnBlocks(bestBlock *chainntnfs.BlockEpoch) error {
+	if bestBlock == nil {
+		return nil
+	}
+
+	_, currHeight, err := n.p2pNode.BlockHeaders.ChainTip()
+	if err != nil {
+		return fmt.Errorf("unable to get best block: %v", err)
+	}
+
+	startingHeight := bestBlock.Height + 1
+	header, err := n.p2pNode.BlockHeaders.FetchHeaderByHeight(uint32(bestBlock.Height))
+	if err != nil {
+		return fmt.Errorf("unable to get header for height=%v: %v",
+			bestBlock.Height, err)
+	}
+	hashAtBestHeight := header.BlockHash()
+
+	// If a reorg causes the hash to be incorrect, start from the bestBlock's height
+	// Doesn't handle the case where other past blocks are incorrect
+	if hashAtBestHeight != *bestBlock.Hash {
+		startingHeight = bestBlock.Height
+	}
+	for height := startingHeight; height <= int32(currHeight); height++ {
+		header, err := n.p2pNode.BlockHeaders.FetchHeaderByHeight(uint32(bestBlock.Height))
+		if err != nil {
+			return fmt.Errorf("unable to get header for height=%v: %v",
+				bestBlock.Height, err)
+		}
+		hash := header.BlockHash()
+		n.notifyBlockEpochs(height, &hash)
+	}
+	return nil
 }
