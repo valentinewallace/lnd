@@ -856,7 +856,7 @@ type epochCancel struct {
 // RegisterBlockEpochNtfn returns a BlockEpochEvent which subscribes the
 // caller to receive notifications, of each new block connected to the main
 // chain.
-func (b *BtcdNotifier) RegisterBlockEpochNtfn() (*chainntnfs.BlockEpochEvent, error) {
+func (b *BtcdNotifier) RegisterBlockEpochNtfn(bestBlock *chainntnfs.BlockEpoch) (*chainntnfs.BlockEpochEvent, error) {
 	reg := &blockEpochRegistration{
 		epochQueue: chainntnfs.NewConcurrentQueue(20),
 		epochChan:  make(chan *chainntnfs.BlockEpoch, 20),

@@ -771,7 +771,7 @@ func (m *mockNotifier) RegisterConfirmationsNtfn(txid *chainhash.Hash,
 	numConfs uint32, heightHint uint32) (*chainntnfs.ConfirmationEvent, error) {
 	return nil, nil
 }
-func (m *mockNotifier) RegisterBlockEpochNtfn() (*chainntnfs.BlockEpochEvent, error) {
+func (m *mockNotifier) RegisterBlockEpochNtfn(bestBlock *chainntnfs.BlockEpoch) (*chainntnfs.BlockEpochEvent, error) {
 	return &chainntnfs.BlockEpochEvent{
 		Epochs: m.epochChan,
 		Cancel: func() {},
