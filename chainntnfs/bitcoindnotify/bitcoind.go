@@ -71,6 +71,9 @@ type BitcoindNotifier struct {
 
 	blockEpochClients map[uint64]*blockEpochRegistration
 
+	bestBlockMtx sync.RWMutex
+	bestBlock    *chainntnfs.BlockEpoch
+
 	wg   sync.WaitGroup
 	quit chan struct{}
 }
@@ -126,13 +129,15 @@ func (b *BitcoindNotifier) Start() error {
 		return err
 	}
 
-	_, currentHeight, err := b.chainConn.GetBestBlock()
+	currentHash, currentHeight, err := b.chainConn.GetBestBlock()
 	if err != nil {
 		return err
 	}
 
 	b.txConfNotifier = chainntnfs.NewTxConfNotifier(
 		uint32(currentHeight), reorgSafetyLimit)
+
+	b.bestBlock = &chainntnfs.BlockEpoch{Height: currentHeight, Hash: currentHash}
 
 	b.wg.Add(1)
 	go b.notificationDispatcher(currentHeight)
@@ -279,6 +284,10 @@ out:
 				}
 				bestHeight = item.Height
 
+				b.bestBlockMtx.Lock()
+				b.bestBlock = &chainntnfs.BlockEpoch{Height: bestHeight, Hash: &item.Hash}
+				b.bestBlockMtx.Unlock()
+
 				rawBlock, err := b.chainConn.GetBlock(&item.Hash)
 				if err != nil {
 					chainntnfs.Log.Errorf("Unable to get block: %v", err)
@@ -307,6 +316,10 @@ out:
 					continue
 				}
 				bestHeight = item.Height - 1
+
+				b.bestBlockMtx.Lock()
+				b.bestBlock = &chainntnfs.BlockEpoch{Height: bestHeight - 1, Hash: nil}
+				b.bestBlockMtx.Unlock()
 
 				chainntnfs.Log.Infof("Block disconnected from "+
 					"main chain: height=%v, sha=%v",
