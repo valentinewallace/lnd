@@ -331,10 +331,12 @@ out:
 			update := item.(*chainUpdate)
 			if update.connect {
 				if update.blockHeight != currentHeight+1 {
-					chainntnfs.Log.Warnf("Received blocks out of order: "+
-						"current height=%d, new height=%d",
-						currentHeight, update.blockHeight)
-					continue
+					// Send historical block notifications to clients
+					// starting with our currently best known block
+					b.bestBlockMtx.RLock()
+					bestBlock := b.bestBlock
+					b.bestBlockMtx.RUnlock()
+					b.catchUpOnBlocks(bestBlock)
 				}
 
 				currentHeight = update.blockHeight
@@ -961,6 +963,8 @@ func (b *BtcdNotifier) catchUpOnBlocks(bestBlock *chainntnfs.BlockEpoch) error {
 		return fmt.Errorf("unable to get best block: %v", err)
 	}
 
+	// We want to start catching up at the block after the client's best known block, to avoid
+	// a redundant notification
 	startingHeight := bestBlock.Height + 1
 	hashAtBestHeight, err := b.chainConn.GetBlockHash(int64(bestBlock.Height))
 	if err != nil {
@@ -974,10 +978,23 @@ func (b *BtcdNotifier) catchUpOnBlocks(bestBlock *chainntnfs.BlockEpoch) error {
 	}
 	for height := startingHeight; height <= currHeight; height++ {
 		hash, err := b.chainConn.GetBlockHash(int64(height))
+
+		rawBlock, err := b.chainConn.GetBlock(hash)
 		if err != nil {
-			return fmt.Errorf("unable to find blockhash for height=%d: %v", bestBlock.Height, err)
+			return fmt.Errorf("unable to get block: %v", err)
 		}
-		b.notifyBlockEpochs(height, hash)
+
+		txns := btcutil.NewBlock(rawBlock).Transactions()
+
+		block := &filteredBlock{
+			hash:    *hash,
+			height:  uint32(height),
+			txns:    txns,
+			connect: true,
+		}
+		if err := b.handleBlockConnected(block); err != nil {
+			return fmt.Errorf("error on handling connected block: %v", err)
+		}
 	}
 	return nil
 }
