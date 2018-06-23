@@ -638,10 +638,37 @@ func testBlockEpochNotification(miner *rpctest.Harness,
 	case <-time.After(30 * time.Second):
 		t.Fatalf("all notifications not sent")
 	}
-	// Test scenario where a subsystem misses block notifications
+}
+
+func testHistoricalBlockEpochNotification(miner *rpctest.Harness,
+	notifier chainntnfs.ChainNotifier, t *testing.T) {
+
+	// We'd like to test the case of multiple registered clients receiving
+	// historical block epoch notifications due to their best known block
+	// being out of date.
+
+	const numBlocks = 10
+	const numClients = 5
+	var wg sync.WaitGroup
+
+	outdatedHash, outdatedHeight, err := miner.Node.GetBestBlock()
+	if err != nil {
+		t.Fatalf("unable to retrieve current height: %v", err)
+	}
+
+	// Generate 10 blocks which clients should receive historical notifications
+	// for.
+	if _, err := miner.Node.Generate(numBlocks); err != nil {
+		t.Fatalf("unable to generate blocks: %v", err)
+	}
+
+	// Create numClients clients whose best known block is 10 blocks behind
+	// the tip of the chain.
+	// We expect each client to receive 10 notifications, 1 for each block
+	// they're behind.
+	// So we'll use a WaitGroup to synchronize the test.
 	for i := 0; i < numClients; i++ {
-		// Register such that each client is notified for every past block
-		epochClient, err := notifier.RegisterBlockEpochNtfn(&chainntnfs.BlockEpoch{Height: 1, Hash: nil})
+		epochClient, err := notifier.RegisterBlockEpochNtfn(&chainntnfs.BlockEpoch{Height: outdatedHeight, Hash: outdatedHash})
 		if err != nil {
 			t.Fatalf("unable to register for epoch notification: %v", err)
 		}
@@ -655,7 +682,7 @@ func testBlockEpochNotification(miner *rpctest.Harness,
 		}()
 	}
 
-	epochsSent = make(chan struct{})
+	epochsSent := make(chan struct{})
 	go func() {
 		wg.Wait()
 		close(epochsSent)
@@ -1465,6 +1492,10 @@ var ntfnTests = []testCase{
 	{
 		name: "block epoch",
 		test: testBlockEpochNotification,
+	},
+	{
+		name: "historical block epoch ntfns",
+		test: testHistoricalBlockEpochNotification,
 	},
 	{
 		name: "historical conf dispatch",
