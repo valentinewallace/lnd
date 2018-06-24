@@ -847,7 +847,10 @@ func (b *BitcoindNotifier) RegisterBlockEpochNtfn(bestBlock *chainntnfs.BlockEpo
 	}
 }
 
-func (b *BitcoindNotifier) catchUpOnMissedBlocks(bestBlock *chainntnfs.BlockEpoch) error {
+// catchUpOnMissedBlocks is called when the chain backend misses a series of
+// blocks. It dispatches all relevant notifications for the missed blocks.
+func (b *BitcoindNotifier) catchUpOnMissedBlocks(
+	bestBlock *chainntnfs.BlockEpoch) error {
 	if bestBlock == nil {
 		return nil
 	}
@@ -857,17 +860,19 @@ func (b *BitcoindNotifier) catchUpOnMissedBlocks(bestBlock *chainntnfs.BlockEpoc
 		return fmt.Errorf("unable to get best block: %v", err)
 	}
 
-	// We want to start catching up at the block after the client's best known block, to avoid
-	// a redundant notification
+	// We want to start catching up at the block after the client's best
+	// known block, to avoid a redundant notification
 	startingHeight := bestBlock.Height + 1
 	hashAtBestHeight, err := b.chainConn.GetBlockHash(int64(bestBlock.Height))
 	if err != nil {
-		return fmt.Errorf("unable to find blockhash for height=%d: %v", bestBlock.Height, err)
+		return fmt.Errorf("unable to find blockhash for height=%d: %v",
+			bestBlock.Height, err)
 	}
 
-	// If a reorg causes the hash to be incorrect, start from the bestBlock's height
+	// If a reorg causes the hash to be incorrect, start from the bestBlock's
+	// height.
 	// Doesn't handle the case where other past blocks are incorrect
-	if hashAtBestHeight != bestBlock.Hash {
+	if bestBlock.Hash == nil || *hashAtBestHeight != *bestBlock.Hash {
 		startingHeight = bestBlock.Height
 	}
 	for height := startingHeight; height < currHeight; height++ {
@@ -890,7 +895,12 @@ func (b *BitcoindNotifier) catchUpOnMissedBlocks(bestBlock *chainntnfs.BlockEpoc
 	return nil
 }
 
-func (b *BitcoindNotifier) catchUpClientOnBlocks(bestBlock *chainntnfs.BlockEpoch) error {
+// catchUpClientOnBlocks is called when a notification client's best block
+// is behind our current best block.
+// It dispatches block notifications for all the blocks missed by the client
+// or does nothing if the client doesn't send us its best block.
+func (b *BitcoindNotifier) catchUpClientOnBlocks(
+	bestBlock *chainntnfs.BlockEpoch) error {
 	if bestBlock == nil {
 		return nil
 	}
@@ -900,21 +910,26 @@ func (b *BitcoindNotifier) catchUpClientOnBlocks(bestBlock *chainntnfs.BlockEpoc
 		return fmt.Errorf("unable to get best block: %v", err)
 	}
 
+	// We want to start catching up at the block after the client's best
+	// known block, to avoid a redundant notification
 	startingHeight := bestBlock.Height + 1
 	hashAtBestHeight, err := b.chainConn.GetBlockHash(int64(bestBlock.Height))
 	if err != nil {
-		return fmt.Errorf("unable to find blockhash for height=%d: %v", bestBlock.Height, err)
+		return fmt.Errorf("unable to find blockhash for height=%d: %v",
+			bestBlock.Height, err)
 	}
 
-	// If a reorg causes the hash to be incorrect, start from the bestBlock's height
-	// Doesn't handle the case where additional past blocks are incorrect
-	if hashAtBestHeight != bestBlock.Hash {
+	// If a reorg causes the hash to be incorrect, start from the bestBlock's
+	// height.
+	// Doesn't handle the case where other past blocks are incorrect
+	if bestBlock.Hash == nil || *hashAtBestHeight != *bestBlock.Hash {
 		startingHeight = bestBlock.Height
 	}
 	for height := startingHeight; height <= currHeight; height++ {
 		hash, err := b.chainConn.GetBlockHash(int64(height))
 		if err != nil {
-			return fmt.Errorf("unable to find blockhash for height=%d: %v", bestBlock.Height, err)
+			return fmt.Errorf("unable to find blockhash for height=%d: %v",
+				bestBlock.Height, err)
 		}
 		b.notifyBlockEpochs(height, hash)
 	}
