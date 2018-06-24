@@ -127,7 +127,10 @@ func (n *NeutrinoNotifier) Start() error {
 		Height: int32(bestHeight),
 		Hash:   bestHash,
 	}
-	n.bestBlock = &chainntnfs.BlockEpoch{Height: int32(bestHeight), Hash: &bestHash}
+	n.bestBlock = &chainntnfs.BlockEpoch{
+		Height: int32(bestHeight),
+		Hash:   &bestHash,
+	}
 
 	// Next, we'll create our set of rescan options. Currently it's
 	// required that a user MUST set an addr/outpoint/txid when creating a
@@ -343,7 +346,6 @@ func (n *NeutrinoNotifier) notificationDispatcher() {
 			update := item.(*filteredBlock)
 			if update.connect {
 				if update.height != uint32(n.bestBlock.Height)+1 {
-					fmt.Printf("in if case\n")
 					// Send historical block notifications
 					// to clients
 					n.bestBlockMtx.RLock()
@@ -820,8 +822,7 @@ func (n *NeutrinoNotifier) RegisterBlockEpochNtfn(
 
 // catchUpOnMissedBlocks is called when the chain backend misses a series of
 // blocks. It dispatches all relevant notifications for the missed blocks.
-func (n *NeutrinoNotifier) catchUpOnMissedBlocks(
-	bestBlock *chainntnfs.BlockEpoch) error {
+func (n *NeutrinoNotifier) catchUpOnMissedBlocks(bestBlock *chainntnfs.BlockEpoch) error {
 	if bestBlock == nil {
 		return nil
 	}
@@ -882,8 +883,7 @@ func (n *NeutrinoNotifier) catchUpOnMissedBlocks(
 // is behind our current best block.
 // It dispatches block notifications for all the blocks missed by the client
 // or does nothing if the client doesn't send us its best block.
-func (n *NeutrinoNotifier) catchUpClientOnBlocks(
-	bestBlock *chainntnfs.BlockEpoch) error {
+func (n *NeutrinoNotifier) catchUpClientOnBlocks(bestBlock *chainntnfs.BlockEpoch) error {
 	if bestBlock == nil {
 		return nil
 	}

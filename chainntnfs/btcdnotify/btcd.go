@@ -153,7 +153,10 @@ func (b *BtcdNotifier) Start() error {
 	b.txConfNotifier = chainntnfs.NewTxConfNotifier(
 		uint32(currentHeight), reorgSafetyLimit)
 
-	b.bestBlock = &chainntnfs.BlockEpoch{Height: currentHeight, Hash: currentHash}
+	b.bestBlock = &chainntnfs.BlockEpoch{
+		Height: currentHeight,
+		Hash:   currentHash,
+	}
 
 	b.chainUpdates.Start()
 	b.txUpdates.Start()
@@ -342,7 +345,10 @@ out:
 				currentHeight = update.blockHeight
 
 				b.bestBlockMtx.Lock()
-				b.bestBlock = &chainntnfs.BlockEpoch{Height: currentHeight, Hash: update.blockHash}
+				b.bestBlock = &chainntnfs.BlockEpoch{
+					Height: currentHeight,
+					Hash:   update.blockHash,
+				}
 				b.bestBlockMtx.Unlock()
 
 				rawBlock, err := b.chainConn.GetBlock(update.blockHash)
@@ -378,7 +384,10 @@ out:
 			currentHeight = update.blockHeight - 1
 
 			b.bestBlockMtx.Lock()
-			b.bestBlock = &chainntnfs.BlockEpoch{Height: currentHeight - 1, Hash: nil}
+			b.bestBlock = &chainntnfs.BlockEpoch{
+				Height: currentHeight - 1,
+				Hash:   nil,
+			}
 			b.bestBlockMtx.Unlock()
 
 			chainntnfs.Log.Infof("Block disconnected from main chain: "+
@@ -874,7 +883,8 @@ type epochCancel struct {
 // RegisterBlockEpochNtfn returns a BlockEpochEvent which subscribes the
 // caller to receive notifications, of each new block connected to the main
 // chain.
-func (b *BtcdNotifier) RegisterBlockEpochNtfn(bestBlock *chainntnfs.BlockEpoch) (*chainntnfs.BlockEpochEvent, error) {
+func (b *BtcdNotifier) RegisterBlockEpochNtfn(
+	bestBlock *chainntnfs.BlockEpoch) (*chainntnfs.BlockEpochEvent, error) {
 	reg := &blockEpochRegistration{
 		epochQueue: chainntnfs.NewConcurrentQueue(20),
 		epochChan:  make(chan *chainntnfs.BlockEpoch, 20),
@@ -955,8 +965,7 @@ func (b *BtcdNotifier) RegisterBlockEpochNtfn(bestBlock *chainntnfs.BlockEpoch) 
 
 // catchUpOnMissedBlocks is called when the chain backend misses a series of
 // blocks. It dispatches all relevant notifications for the missed blocks.
-func (b *BtcdNotifier) catchUpOnMissedBlocks(
-	bestBlock *chainntnfs.BlockEpoch) error {
+func (b *BtcdNotifier) catchUpOnMissedBlocks(bestBlock *chainntnfs.BlockEpoch) error {
 	if bestBlock == nil {
 		return nil
 	}
@@ -1009,8 +1018,7 @@ func (b *BtcdNotifier) catchUpOnMissedBlocks(
 // is behind our current best block.
 // It dispatches block notifications for all the blocks missed by the client
 // or does nothing if the client doesn't send us its best block.
-func (b *BtcdNotifier) catchUpClientOnBlocks(
-	bestBlock *chainntnfs.BlockEpoch) error {
+func (b *BtcdNotifier) catchUpClientOnBlocks(bestBlock *chainntnfs.BlockEpoch) error {
 	if bestBlock == nil {
 		return nil
 	}

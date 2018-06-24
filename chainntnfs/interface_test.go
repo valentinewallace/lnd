@@ -668,7 +668,9 @@ func testHistoricalBlockEpochNotification(miner *rpctest.Harness,
 	// they're behind.
 	// So we'll use a WaitGroup to synchronize the test.
 	for i := 0; i < numClients; i++ {
-		epochClient, err := notifier.RegisterBlockEpochNtfn(&chainntnfs.BlockEpoch{Height: outdatedHeight, Hash: outdatedHash})
+		epochClient, err := notifier.RegisterBlockEpochNtfn(
+			&chainntnfs.BlockEpoch{
+				Height: outdatedHeight, Hash: outdatedHash})
 		if err != nil {
 			t.Fatalf("unable to register for epoch notification: %v", err)
 		}

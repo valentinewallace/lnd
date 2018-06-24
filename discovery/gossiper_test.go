@@ -279,7 +279,8 @@ func (m *mockNotifier) notifyBlock(hash chainhash.Hash, height uint32) {
 	}
 }
 
-func (m *mockNotifier) RegisterBlockEpochNtfn(bestBlock *chainntnfs.BlockEpoch) (*chainntnfs.BlockEpochEvent, error) {
+func (m *mockNotifier) RegisterBlockEpochNtfn(
+	bestBlock *chainntnfs.BlockEpoch) (*chainntnfs.BlockEpochEvent, error) {
 	m.RLock()
 	defer m.RUnlock()
 

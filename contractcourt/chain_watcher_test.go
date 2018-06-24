@@ -21,7 +21,8 @@ func (m *mockNotifier) RegisterConfirmationsNtfn(txid *chainhash.Hash, numConfs,
 	heightHint uint32) (*chainntnfs.ConfirmationEvent, error) {
 	return nil, nil
 }
-func (m *mockNotifier) RegisterBlockEpochNtfn(bestBlock *chainntnfs.BlockEpoch) (*chainntnfs.BlockEpochEvent, error) {
+func (m *mockNotifier) RegisterBlockEpochNtfn(
+	bestBlock *chainntnfs.BlockEpoch) (*chainntnfs.BlockEpochEvent, error) {
 	return &chainntnfs.BlockEpochEvent{
 		Epochs: make(chan *chainntnfs.BlockEpoch),
 		Cancel: func() {},
