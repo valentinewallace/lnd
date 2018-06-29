@@ -403,20 +403,22 @@ func (d *AuthenticatedGossiper) Start() error {
 
 	log.Info("Authenticated Gossiper is starting")
 
+	hash, height, err := d.cfg.Router.BestBlock()
+	bestBlock := &chainntnfs.BlockEpoch{Hash: hash, Height: int32(height)}
+	if err != nil {
+		bestBlock = nil
+		log.Warnf("unable to retrieve best block from router: %v", err)
+	}
+	d.bestHeight = height
+
 	// First we register for new notifications of newly discovered blocks.
 	// We do this immediately so we'll later be able to consume any/all
 	// blocks which were discovered.
-	blockEpochs, err := d.cfg.Notifier.RegisterBlockEpochNtfn(nil)
+	blockEpochs, err := d.cfg.Notifier.RegisterBlockEpochNtfn(bestBlock)
 	if err != nil {
 		return err
 	}
 	d.blockEpochs = blockEpochs
-
-	height, err := d.cfg.Router.CurrentBlockHeight()
-	if err != nil {
-		return err
-	}
-	d.bestHeight = height
 
 	// In case we had an AnnounceSignatures ready to be sent when the
 	// gossiper was last shut down, we must continue on our quest to

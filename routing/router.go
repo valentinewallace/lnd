@@ -18,6 +18,7 @@ import (
 	"github.com/lightningnetwork/lnd/multimutex"
 	"github.com/lightningnetwork/lnd/routing/chainview"
 	"github.com/roasbeef/btcd/btcec"
+	"github.com/roasbeef/btcd/chaincfg/chainhash"
 	"github.com/roasbeef/btcd/wire"
 	"github.com/roasbeef/btcutil"
 
@@ -83,9 +84,9 @@ type ChannelGraphSource interface {
 	ForAllOutgoingChannels(cb func(c *channeldb.ChannelEdgeInfo,
 		e *channeldb.ChannelEdgePolicy) error) error
 
-	// CurrentBlockHeight returns the block height from POV of the router
+	// BestBlock returns the best block from POV of the router
 	// subsystem.
-	CurrentBlockHeight() (uint32, error)
+	BestBlock() (*chainhash.Hash, uint32, error)
 
 	// GetChannelByID return the channel by the channel id.
 	GetChannelByID(chanID lnwire.ShortChannelID) (*channeldb.ChannelEdgeInfo,
@@ -2094,12 +2095,12 @@ func (r *ChannelRouter) UpdateEdge(update *channeldb.ChannelEdgePolicy) error {
 	}
 }
 
-// CurrentBlockHeight returns the block height from POV of the router subsystem.
+// BestBlock returns the best block from POV of the router subsystem.
 //
 // NOTE: This method is part of the ChannelGraphSource interface.
-func (r *ChannelRouter) CurrentBlockHeight() (uint32, error) {
-	_, height, err := r.cfg.Chain.GetBestBlock()
-	return uint32(height), err
+func (r *ChannelRouter) BestBlock() (*chainhash.Hash, uint32, error) {
+	hash, height, err := r.cfg.Chain.GetBestBlock()
+	return hash, uint32(height), err
 }
 
 // GetChannelByID return the channel by the channel id.

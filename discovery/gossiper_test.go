@@ -150,8 +150,8 @@ func (r *mockGraphSource) SelfEdges() ([]*channeldb.ChannelEdgePolicy, error) {
 	return nil, nil
 }
 
-func (r *mockGraphSource) CurrentBlockHeight() (uint32, error) {
-	return r.bestHeight, nil
+func (r *mockGraphSource) BestBlock() (*chainhash.Hash, uint32, error) {
+	return nil, r.bestHeight, nil
 }
 
 func (r *mockGraphSource) AddProof(chanID lnwire.ShortChannelID,
