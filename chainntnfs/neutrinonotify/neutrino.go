@@ -55,7 +55,7 @@ type NeutrinoNotifier struct {
 	epochClientCounter uint64 // To be used atomically.
 
 	bestBlockMtx sync.RWMutex
-	bestBlock    *chainntnfs.BlockEpoch
+	bestBlock    chainntnfs.BlockEpoch
 
 	p2pNode   *neutrino.ChainService
 	chainView neutrino.Rescan
@@ -127,7 +127,7 @@ func (n *NeutrinoNotifier) Start() error {
 		Height: int32(bestHeight),
 		Hash:   bestHash,
 	}
-	n.bestBlock = &chainntnfs.BlockEpoch{
+	n.bestBlock = chainntnfs.BlockEpoch{
 		Height: int32(bestHeight),
 		Hash:   &bestHash,
 	}
@@ -339,23 +339,33 @@ func (n *NeutrinoNotifier) notificationDispatcher() {
 			case *blockEpochRegistration:
 				chainntnfs.Log.Infof("New block epoch subscription")
 				n.blockEpochClients[msg.epochID] = msg
-				n.catchUpClientOnBlocks(msg.bestBlock)
+				err := n.catchUpClientOnBlocks(msg.bestBlock)
+				if err != nil {
+					chainntnfs.Log.Error(err)
+				}
 			}
 
 		case item := <-n.chainUpdates.ChanOut():
 			update := item.(*filteredBlock)
 			if update.connect {
-				if update.height != uint32(n.bestBlock.Height)+1 {
+				n.bestBlockMtx.RLock()
+				bestHeight := n.bestBlock.Height
+				n.bestBlockMtx.RUnlock()
+				if update.height != uint32(bestHeight)+1 {
 					// Send historical block notifications
 					// to clients
-					n.bestBlockMtx.RLock()
-					bestBlock := n.bestBlock
-					n.bestBlockMtx.RUnlock()
-					n.catchUpOnMissedBlocks(bestBlock)
+					chainntnfs.Log.Infof("Missed blocks, " +
+						"attempting to catch up")
+					err := n.catchUpOnMissedBlocks(int32(update.height))
+					if err != nil {
+						chainntnfs.Log.Error(err)
+						continue
+					}
 				}
 
 				n.bestBlockMtx.Lock()
 				n.bestBlock.Height = int32(update.height)
+				n.bestBlock.Hash = &update.hash
 				n.bestBlockMtx.Unlock()
 
 				chainntnfs.Log.Infof("New block: height=%v, sha=%v",
@@ -378,12 +388,22 @@ func (n *NeutrinoNotifier) notificationDispatcher() {
 			}
 
 			n.bestBlock.Height = int32(update.height) - 1
+			header, err := n.p2pNode.BlockHeaders.FetchHeaderByHeight(
+				uint32(n.bestBlock.Height))
+			if err != nil {
+				chainntnfs.Log.Warnf("unable to get header for height=%v: %v",
+					n.bestBlock.Height, err)
+				n.bestBlockMtx.Unlock()
+				continue
+			}
+			hash := header.BlockHash()
+			n.bestBlock.Hash = &hash
 			n.bestBlockMtx.Unlock()
 
 			chainntnfs.Log.Infof("Block disconnected from main chain: "+
 				"height=%v, sha=%v", update.height, update.hash)
 
-			err := n.txConfNotifier.DisconnectTip(update.height)
+			err = n.txConfNotifier.DisconnectTip(update.height)
 			if err != nil {
 				chainntnfs.Log.Error(err)
 			}
@@ -822,15 +842,10 @@ func (n *NeutrinoNotifier) RegisterBlockEpochNtfn(
 
 // catchUpOnMissedBlocks is called when the chain backend misses a series of
 // blocks. It dispatches all relevant notifications for the missed blocks.
-func (n *NeutrinoNotifier) catchUpOnMissedBlocks(bestBlock *chainntnfs.BlockEpoch) error {
-	if bestBlock == nil {
-		return nil
-	}
-
-	_, currHeight, err := n.p2pNode.BlockHeaders.ChainTip()
-	if err != nil {
-		return fmt.Errorf("unable to get best block: %v", err)
-	}
+func (n *NeutrinoNotifier) catchUpOnMissedBlocks(newHeight int32) error {
+	n.bestBlockMtx.RLock()
+	bestBlock := n.bestBlock
+	n.bestBlockMtx.RUnlock()
 
 	// We want to start catching up at the block after the client's best
 	// known block, to avoid a redundant notification
@@ -843,13 +858,20 @@ func (n *NeutrinoNotifier) catchUpOnMissedBlocks(bestBlock *chainntnfs.BlockEpoc
 	}
 	hashAtBestHeight := header.BlockHash()
 
-	// If a reorg causes the hash to be incorrect, start from the bestBlock's
-	// height.
-	// Doesn't handle the case where other past blocks are incorrect
-	if bestBlock.Hash == nil || hashAtBestHeight != *bestBlock.Hash {
-		startingHeight = bestBlock.Height
+	// If a reorg causes the hash to be incorrect, determine the height of the
+	// first common parent block between the notifier's view of the chain and the
+	// main chain and dispatch notifications from there
+	if bestBlock.Hash != nil && hashAtBestHeight != *bestBlock.Hash {
+		commonAncestorHeight, err := n.getCommonBlockAncestorHeight(
+			*bestBlock.Hash,
+			hashAtBestHeight,
+		)
+		if err != nil {
+			return fmt.Errorf("unable to find common ancestor: %v", err)
+		}
+		startingHeight = commonAncestorHeight + 1
 	}
-	for height := startingHeight; height < int32(currHeight); height++ {
+	for height := startingHeight; height < newHeight; height++ {
 		header, err := n.p2pNode.BlockHeaders.FetchHeaderByHeight(
 			uint32(height))
 		if err != nil {
@@ -888,10 +910,9 @@ func (n *NeutrinoNotifier) catchUpClientOnBlocks(bestBlock *chainntnfs.BlockEpoc
 		return nil
 	}
 
-	_, currHeight, err := n.p2pNode.BlockHeaders.ChainTip()
-	if err != nil {
-		return fmt.Errorf("unable to get best block: %v", err)
-	}
+	n.bestBlockMtx.RLock()
+	currHeight := n.bestBlock.Height
+	n.bestBlockMtx.RUnlock()
 
 	// We want to start catching up at the block after the client's best
 	// known block, to avoid a redundant notification
@@ -904,11 +925,18 @@ func (n *NeutrinoNotifier) catchUpClientOnBlocks(bestBlock *chainntnfs.BlockEpoc
 	}
 	hashAtBestHeight := header.BlockHash()
 
-	// If a reorg causes the hash to be incorrect, start from the bestBlock's
-	// height.
-	// Doesn't handle the case where other past blocks are incorrect
-	if bestBlock.Hash == nil || hashAtBestHeight != *bestBlock.Hash {
-		startingHeight = bestBlock.Height
+	// If a reorg causes the hash to be incorrect, determine the height of the
+	// first common parent block between the client's view of the chain and the
+	// main chain and dispatch notifications from there
+	if bestBlock.Hash != nil && hashAtBestHeight != *bestBlock.Hash {
+		commonAncestorHeight, err := n.getCommonBlockAncestorHeight(
+			*bestBlock.Hash,
+			hashAtBestHeight,
+		)
+		if err != nil {
+			return fmt.Errorf("unable to find common ancestor: %v", err)
+		}
+		startingHeight = commonAncestorHeight + 1
 	}
 	for height := startingHeight; height <= int32(currHeight); height++ {
 		header, err := n.p2pNode.BlockHeaders.FetchHeaderByHeight(
@@ -921,4 +949,28 @@ func (n *NeutrinoNotifier) catchUpClientOnBlocks(bestBlock *chainntnfs.BlockEpoc
 		n.notifyBlockEpochs(height, &hash)
 	}
 	return nil
+}
+
+// getCommonBlockAncestorHeight takes in:
+// (1) the hash of a block that has been reorged out of the main chain
+// (2) the hash of the block of the same height from the main chain
+// It returns the height of the nearest common ancestor between the two hashes,
+// or an error
+func (n *NeutrinoNotifier) getCommonBlockAncestorHeight(
+	reorgHash chainhash.Hash, chainHash chainhash.Hash) (int32, error) {
+	var chainHeader *wire.BlockHeader
+	var height uint32
+	for reorgHash != chainHash {
+		reorgHeader, _, err := n.p2pNode.BlockHeaders.FetchHeader(&reorgHash)
+		if err != nil {
+			return 0, fmt.Errorf("unable to get header for hash=%v: %v", reorgHash, err)
+		}
+		chainHeader, height, err = n.p2pNode.BlockHeaders.FetchHeader(&chainHash)
+		if err != nil {
+			return 0, fmt.Errorf("unable to get header for hash=%v: %v", chainHash, err)
+		}
+		reorgHash = reorgHeader.PrevBlock
+		chainHash = chainHeader.PrevBlock
+	}
+	return int32(height), nil
 }
