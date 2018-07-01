@@ -72,7 +72,7 @@ type BitcoindNotifier struct {
 	blockEpochClients map[uint64]*blockEpochRegistration
 
 	bestBlockMtx sync.RWMutex
-	bestBlock    *chainntnfs.BlockEpoch
+	bestBlock    chainntnfs.BlockEpoch
 
 	wg   sync.WaitGroup
 	quit chan struct{}
@@ -137,7 +137,7 @@ func (b *BitcoindNotifier) Start() error {
 	b.txConfNotifier = chainntnfs.NewTxConfNotifier(
 		uint32(currentHeight), reorgSafetyLimit)
 
-	b.bestBlock = &chainntnfs.BlockEpoch{
+	b.bestBlock = chainntnfs.BlockEpoch{
 		Height: currentHeight,
 		Hash:   currentHash,
 	}
@@ -271,7 +271,10 @@ out:
 			case *blockEpochRegistration:
 				chainntnfs.Log.Infof("New block epoch subscription")
 				b.blockEpochClients[msg.epochID] = msg
-				b.catchUpClientOnBlocks(msg.bestBlock)
+				err := b.catchUpClientOnBlocks(msg.bestBlock)
+				if err != nil {
+					chainntnfs.Log.Error(err)
+				}
 			case chain.RelevantTx:
 				b.handleRelevantTx(msg, bestHeight)
 			}
@@ -282,34 +285,24 @@ out:
 				if item.Height != bestHeight+1 {
 					// Send historical block notifications to clients
 					// starting with our currently best known block
-					b.bestBlockMtx.RLock()
-					bestBlock := b.bestBlock
-					b.bestBlockMtx.RUnlock()
-					b.catchUpOnMissedBlocks(bestBlock)
+					chainntnfs.Log.Infof("Missed blocks, " +
+						"attempting to catch up")
+					err := b.catchUpOnMissedBlocks(item.Height)
+					if err != nil {
+						chainntnfs.Log.Error(err)
+						continue
+					}
 				}
 				bestHeight = item.Height
 
 				b.bestBlockMtx.Lock()
-				b.bestBlock = &chainntnfs.BlockEpoch{
+				b.bestBlock = chainntnfs.BlockEpoch{
 					Height: bestHeight,
 					Hash:   &item.Hash,
 				}
 				b.bestBlockMtx.Unlock()
 
-				rawBlock, err := b.chainConn.GetBlock(&item.Hash)
-				if err != nil {
-					chainntnfs.Log.Errorf("Unable to get block: %v", err)
-					continue
-				}
-
-				chainntnfs.Log.Infof("New block: height=%v, sha=%v",
-					item.Height, item.Hash)
-
-				b.notifyBlockEpochs(item.Height, &item.Hash)
-
-				txns := btcutil.NewBlock(rawBlock).Transactions()
-				err = b.txConfNotifier.ConnectTip(&item.Hash,
-					uint32(item.Height), txns)
+				err := b.handleBlockConnected(item.Height, item.Hash)
 				if err != nil {
 					chainntnfs.Log.Error(err)
 				}
@@ -324,19 +317,21 @@ out:
 					continue
 				}
 				bestHeight = item.Height - 1
-
-				b.bestBlockMtx.Lock()
-				b.bestBlock = &chainntnfs.BlockEpoch{
-					Height: bestHeight - 1,
-					Hash:   nil,
+				blockHash, err := b.chainConn.GetBlockHash(int64(bestHeight))
+				if err != nil {
+					chainntnfs.Log.Warnf("unable to get hash from block "+
+						"with height=%d: %v", bestHeight, err)
 				}
+				b.bestBlockMtx.Lock()
+				b.bestBlock.Height = bestHeight - 1
+				b.bestBlock.Hash = blockHash
 				b.bestBlockMtx.Unlock()
 
 				chainntnfs.Log.Infof("Block disconnected from "+
 					"main chain: height=%v, sha=%v",
 					item.Height, item.Hash)
 
-				err := b.txConfNotifier.DisconnectTip(
+				err = b.txConfNotifier.DisconnectTip(
 					uint32(item.Height))
 				if err != nil {
 					chainntnfs.Log.Error(err)
@@ -523,6 +518,29 @@ func (b *BitcoindNotifier) confDetailsManually(txid *chainhash.Hash,
 	// If we reach here, then we were not able to find the transaction
 	// within a block, so we avoid returning an error.
 	return nil, nil
+}
+
+// handleBlocksConnected applies a chain update for a new block. Any watched
+// transactions included this block will processed to either send notifications
+// now or after numConfirmations confs.
+func (b *BitcoindNotifier) handleBlockConnected(height int32, hash chainhash.Hash) error {
+	rawBlock, err := b.chainConn.GetBlock(&hash)
+	if err != nil {
+		return fmt.Errorf("unable to get block: %v", err)
+	}
+
+	chainntnfs.Log.Infof("New block: height=%v, sha=%v",
+		height, hash)
+
+	b.notifyBlockEpochs(height, &hash)
+
+	txns := btcutil.NewBlock(rawBlock).Transactions()
+	err = b.txConfNotifier.ConnectTip(&hash,
+		uint32(height), txns)
+	if err != nil {
+		return fmt.Errorf("unable to connect tip: %v", err)
+	}
+	return nil
 }
 
 // notifyBlockEpochs notifies all registered block epoch clients of the newly
@@ -859,15 +877,10 @@ func (b *BitcoindNotifier) RegisterBlockEpochNtfn(
 
 // catchUpOnMissedBlocks is called when the chain backend misses a series of
 // blocks. It dispatches all relevant notifications for the missed blocks.
-func (b *BitcoindNotifier) catchUpOnMissedBlocks(bestBlock *chainntnfs.BlockEpoch) error {
-	if bestBlock == nil {
-		return nil
-	}
-
-	_, currHeight, err := b.chainConn.GetBestBlock()
-	if err != nil {
-		return fmt.Errorf("unable to get best block: %v", err)
-	}
+func (b *BitcoindNotifier) catchUpOnMissedBlocks(newHeight int32) error {
+	b.bestBlockMtx.RLock()
+	bestBlock := b.bestBlock
+	b.bestBlockMtx.RUnlock()
 
 	// We want to start catching up at the block after the client's best
 	// known block, to avoid a redundant notification
@@ -878,27 +891,27 @@ func (b *BitcoindNotifier) catchUpOnMissedBlocks(bestBlock *chainntnfs.BlockEpoc
 			bestBlock.Height, err)
 	}
 
-	// If a reorg causes the hash to be incorrect, start from the bestBlock's
-	// height.
-	// Doesn't handle the case where other past blocks are incorrect
-	if bestBlock.Hash == nil || *hashAtBestHeight != *bestBlock.Hash {
-		startingHeight = bestBlock.Height
-	}
-	for height := startingHeight; height < currHeight; height++ {
-		hash, err := b.chainConn.GetBlockHash(int64(height))
-
-		rawBlock, err := b.chainConn.GetBlock(hash)
+	// If a reorg causes the hash to be incorrect, determine the height of the
+	// first common parent block between the notifier's view of the chain and the
+	// main chain and dispatch notifications from there
+	if bestBlock.Hash != nil && *hashAtBestHeight != *bestBlock.Hash {
+		commonAncestorHeight, err := b.getCommonBlockAncestorHeight(
+			*bestBlock.Hash,
+			*hashAtBestHeight,
+		)
 		if err != nil {
-			return fmt.Errorf("unable to get block: %v", err)
+			return fmt.Errorf("unable to find common ancestor: %v", err)
 		}
-
-		b.notifyBlockEpochs(height, hash)
-
-		txns := btcutil.NewBlock(rawBlock).Transactions()
-		err = b.txConfNotifier.ConnectTip(hash,
-			uint32(height), txns)
+		startingHeight = commonAncestorHeight + 1
+	}
+	for height := startingHeight; height < newHeight; height++ {
+		hash, err := b.chainConn.GetBlockHash(int64(height))
 		if err != nil {
-			return fmt.Errorf("unable to connect tip: %v", err)
+			return fmt.Errorf("unable to get block hash: %v", err)
+		}
+		if err := b.handleBlockConnected(height, *hash); err != nil {
+			return fmt.Errorf("error on handling connected block: %v",
+				err)
 		}
 	}
 	return nil
@@ -913,10 +926,9 @@ func (b *BitcoindNotifier) catchUpClientOnBlocks(bestBlock *chainntnfs.BlockEpoc
 		return nil
 	}
 
-	_, currHeight, err := b.chainConn.GetBestBlock()
-	if err != nil {
-		return fmt.Errorf("unable to get best block: %v", err)
-	}
+	b.bestBlockMtx.RLock()
+	currHeight := b.bestBlock.Height
+	b.bestBlockMtx.RUnlock()
 
 	// We want to start catching up at the block after the client's best
 	// known block, to avoid a redundant notification
@@ -927,11 +939,18 @@ func (b *BitcoindNotifier) catchUpClientOnBlocks(bestBlock *chainntnfs.BlockEpoc
 			bestBlock.Height, err)
 	}
 
-	// If a reorg causes the hash to be incorrect, start from the bestBlock's
-	// height.
-	// Doesn't handle the case where other past blocks are incorrect
-	if bestBlock.Hash == nil || *hashAtBestHeight != *bestBlock.Hash {
-		startingHeight = bestBlock.Height
+	// If a reorg causes the hash to be incorrect, determine the height of the
+	// first common parent block between the client's view of the chain and the
+	// main chain and dispatch notifications from there
+	if bestBlock.Hash != nil && *hashAtBestHeight != *bestBlock.Hash {
+		commonAncestorHeight, err := b.getCommonBlockAncestorHeight(
+			*bestBlock.Hash,
+			*hashAtBestHeight,
+		)
+		if err != nil {
+			return fmt.Errorf("unable to find common ancestor: %v", err)
+		}
+		startingHeight = commonAncestorHeight + 1
 	}
 	for height := startingHeight; height <= currHeight; height++ {
 		hash, err := b.chainConn.GetBlockHash(int64(height))
@@ -942,4 +961,30 @@ func (b *BitcoindNotifier) catchUpClientOnBlocks(bestBlock *chainntnfs.BlockEpoc
 		b.notifyBlockEpochs(height, hash)
 	}
 	return nil
+}
+
+// getCommonBlockAncestorHeight takes in:
+// (1) the hash of a block that has been reorged out of the main chain
+// (2) the hash of the block of the same height from the main chain
+// It returns the height of the nearest common ancestor between the two hashes,
+// or an error
+func (b *BitcoindNotifier) getCommonBlockAncestorHeight(
+	reorgHash chainhash.Hash, chainHash chainhash.Hash) (int32, error) {
+	for reorgHash != chainHash {
+		reorgHeader, err := b.chainConn.GetBlockHeader(&reorgHash)
+		if err != nil {
+			return 0, fmt.Errorf("unable to get header for hash=%v: %v", reorgHash, err)
+		}
+		chainHeader, err := b.chainConn.GetBlockHeader(&chainHash)
+		if err != nil {
+			return 0, fmt.Errorf("unable to get header for hash=%v: %v", chainHash, err)
+		}
+		reorgHash = reorgHeader.PrevBlock
+		chainHash = chainHeader.PrevBlock
+	}
+	verboseHeader, err := b.chainConn.GetBlockHeaderVerbose(&chainHash)
+	if err != nil {
+		return 0, fmt.Errorf("unable to get verbose header for hash=%v: %v", chainHash, err)
+	}
+	return verboseHeader.Height, nil
 }
