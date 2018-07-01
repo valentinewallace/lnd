@@ -185,12 +185,15 @@ func newActiveChannelArbitrator(channel *channeldb.OpenChannel,
 	// We'll start by registering for a block epoch notifications so this
 	// channel can keep track of the current state of the main chain.
 	//
-	// TODO(roasbeef): fetch best height (or pass in) so can ensure block
-	// epoch delivers all the notifications to
-	//
 	// TODO(roasbeef): instead 1 block epoch that multi-plexes to the rest?
 	//  * reduces the number of goroutines
-	blockEpoch, err := c.cfg.Notifier.RegisterBlockEpochNtfn(nil)
+	bestHash, bestHeight, err := c.cfg.ChainIO.GetBestBlock()
+	bestBlock := &chainntnfs.BlockEpoch{Hash: bestHash, Height: bestHeight}
+	if err != nil {
+		bestBlock = nil
+		log.Tracef("Unable to fetch best block during ChannelArbitrator initialization: &v", err)
+	}
+	blockEpoch, err := c.cfg.Notifier.RegisterBlockEpochNtfn(bestBlock)
 	if err != nil {
 		return nil, err
 	}
@@ -396,6 +399,12 @@ func (c *ChainArbitrator) Start() error {
 	// corresponding more restricted resolver, as we don't have to watch
 	// the chain any longer, only resolve the contracts on the confirmed
 	// commitment.
+	bestHash, bestHeight, err := c.cfg.ChainIO.GetBestBlock()
+	bestBlock := &chainntnfs.BlockEpoch{Hash: bestHash, Height: bestHeight}
+	if err != nil {
+		bestBlock = nil
+		log.Tracef("Unable to fetch best block during ChannelArbitrator start: &v", err)
+	}
 	for _, closeChanInfo := range closingChannels {
 		// If this is a pending cooperative close channel then we'll
 		// simply launch a goroutine to wait until the closing
@@ -413,7 +422,7 @@ func (c *ChainArbitrator) Start() error {
 			continue
 		}
 
-		blockEpoch, err := c.cfg.Notifier.RegisterBlockEpochNtfn(nil)
+		blockEpoch, err := c.cfg.Notifier.RegisterBlockEpochNtfn(bestBlock)
 		if err != nil {
 			return err
 		}

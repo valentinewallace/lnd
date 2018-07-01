@@ -847,9 +847,9 @@ func (h *htlcOutgoingContestResolver) Resolve() (ContractResolver, error) {
 	// HTLC.
 	//
 	// TODO(roasbeef): use grace period instead?
-	_, currentHeight, err := h.ChainIO.GetBestBlock()
+	currentHash, currentHeight, err := h.ChainIO.GetBestBlock()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to retrieve best block: %v", err)
 	}
 	if uint32(currentHeight) >= h.htlcResolution.Expiry {
 		log.Infof("%T(%v): HTLC has expired (height=%v, expiry=%v), "+
@@ -861,7 +861,12 @@ func (h *htlcOutgoingContestResolver) Resolve() (ContractResolver, error) {
 	// If we reach this point, then we can't fully act yet, so we'll await
 	// either of our signals triggering: the HTLC expires, or we learn of
 	// the preimage.
-	blockEpochs, err := h.Notifier.RegisterBlockEpochNtfn(nil)
+	blockEpochs, err := h.Notifier.RegisterBlockEpochNtfn(
+		&chainntnfs.BlockEpoch{
+			Hash:   currentHash,
+			Height: currentHeight,
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -994,7 +999,7 @@ func (h *htlcIncomingContestResolver) Resolve() (ContractResolver, error) {
 
 	// We'll first check if this HTLC has been timed out, if so, we can
 	// return now and mark ourselves as resolved.
-	_, currentHeight, err := h.ChainIO.GetBestBlock()
+	currentHash, currentHeight, err := h.ChainIO.GetBestBlock()
 	if err != nil {
 		return nil, err
 	}
@@ -1056,7 +1061,12 @@ func (h *htlcIncomingContestResolver) Resolve() (ContractResolver, error) {
 	// it if we learn of the pre-image, so we'll wait and see if it pops
 	// up, or the HTLC times out.
 	preimageSubscription := h.PreimageDB.SubscribeUpdates()
-	blockEpochs, err := h.Notifier.RegisterBlockEpochNtfn(nil)
+	blockEpochs, err := h.Notifier.RegisterBlockEpochNtfn(
+		&chainntnfs.BlockEpoch{
+			Hash:   currentHash,
+			Height: currentHeight,
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
