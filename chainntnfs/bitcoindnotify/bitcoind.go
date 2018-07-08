@@ -969,7 +969,7 @@ func (b *BitcoindNotifier) catchUpClientOnBlocks(bestBlock *chainntnfs.BlockEpoc
 // It returns the height of the nearest common ancestor between the two hashes,
 // or an error
 func (b *BitcoindNotifier) getCommonBlockAncestorHeight(
-	reorgHash chainhash.Hash, chainHash chainhash.Hash) (int32, error) {
+	reorgHash, chainHash chainhash.Hash) (int32, error) {
 	for reorgHash != chainHash {
 		reorgHeader, err := b.chainConn.GetBlockHeader(&reorgHash)
 		if err != nil {

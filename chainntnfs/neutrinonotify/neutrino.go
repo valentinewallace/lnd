@@ -962,7 +962,7 @@ func (n *NeutrinoNotifier) catchUpClientOnBlocks(bestBlock *chainntnfs.BlockEpoc
 // It returns the height of the nearest common ancestor between the two hashes,
 // or an error
 func (n *NeutrinoNotifier) getCommonBlockAncestorHeight(
-	reorgHash chainhash.Hash, chainHash chainhash.Hash) (int32, error) {
+	reorgHash, chainHash chainhash.Hash) (int32, error) {
 	var chainHeader *wire.BlockHeader
 	var height uint32
 	for reorgHash != chainHash {
