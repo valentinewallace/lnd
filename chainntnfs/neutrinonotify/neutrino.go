@@ -492,10 +492,20 @@ func (n *NeutrinoNotifier) historicalConfDetails(targetHash *chainhash.Hash,
 // transactions included this block will processed to either send notifications
 // now or after numConfirmations confs.
 func (n *NeutrinoNotifier) handleBlockConnected(newBlock *filteredBlock) error {
-	// First we'll notify any subscribed clients of the block.
+
+	// First process the block for our internal state.
+	// A new block has been connected to the main chain.
+	// Send out any N confirmation notifications which may
+	// have been triggered by this new block.
+	err := n.txConfNotifier.ConnectTip(&newBlock.hash, newBlock.height, newBlock.txns)
+	if err != nil {
+		return fmt.Errorf("unable to connect tip: %v", err)
+	}
+
+	// Next, notify any subscribed clients of the block.
 	n.notifyBlockEpochs(int32(newBlock.height), &newBlock.hash)
 
-	// Next, we'll scan over the list of relevant transactions and possibly
+	// Finally, we'll scan over the list of relevant transactions and possibly
 	// dispatch notifications for confirmations and spends.
 	for _, tx := range newBlock.txns {
 		mtx := tx.MsgTx()
@@ -536,11 +546,6 @@ func (n *NeutrinoNotifier) handleBlockConnected(newBlock *filteredBlock) error {
 			delete(n.spendNotifications, prevOut)
 		}
 	}
-
-	// A new block has been connected to the main chain.
-	// Send out any N confirmation notifications which may
-	// have been triggered by this new block.
-	n.txConfNotifier.ConnectTip(&newBlock.hash, newBlock.height, newBlock.txns)
 
 	return nil
 }

@@ -532,14 +532,14 @@ func (b *BitcoindNotifier) handleBlockConnected(height int32, hash chainhash.Has
 	chainntnfs.Log.Infof("New block: height=%v, sha=%v",
 		height, hash)
 
-	b.notifyBlockEpochs(height, &hash)
-
 	txns := btcutil.NewBlock(rawBlock).Transactions()
 	err = b.txConfNotifier.ConnectTip(&hash,
 		uint32(height), txns)
 	if err != nil {
 		return fmt.Errorf("unable to connect tip: %v", err)
 	}
+
+	b.notifyBlockEpochs(height, &hash)
 	return nil
 }
 
