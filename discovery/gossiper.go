@@ -407,7 +407,7 @@ func (d *AuthenticatedGossiper) Start() error {
 	bestBlock := &chainntnfs.BlockEpoch{Hash: hash, Height: int32(height)}
 	if err != nil {
 		bestBlock = nil
-		log.Warnf("unable to retrieve best block from router: %v", err)
+		return fmt.Errorf("unable to retrieve best block from router: %v", err)
 	}
 	d.bestHeight = height
 
