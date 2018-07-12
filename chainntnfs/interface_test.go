@@ -656,15 +656,15 @@ func testHistoricalBlockEpochNotification(miner *rpctest.Harness,
 		t.Fatalf("unable to retrieve current height: %v", err)
 	}
 
-	// Generate 10 blocks which clients should receive historical notifications
-	// for.
+	// Generate numBlocks blocks which clients should receive historical
+	// notifications for.
 	if _, err := miner.Node.Generate(numBlocks); err != nil {
 		t.Fatalf("unable to generate blocks: %v", err)
 	}
 
 	// Create numClients clients whose best known block is 10 blocks behind
 	// the tip of the chain.
-	// We expect each client to receive 10 notifications, 1 for each block
+	// We expect each client to receive numBlocks notifications, 1 for each block
 	// they're behind.
 	// So we'll use a WaitGroup to synchronize the test.
 	for i := 0; i < numClients; i++ {
@@ -692,7 +692,7 @@ func testHistoricalBlockEpochNotification(miner *rpctest.Harness,
 
 	select {
 	case <-epochsSent:
-	case <-time.After(30 * time.Second):
+	case <-time.After(20 * time.Second):
 		t.Fatalf("all historical notifications not sent")
 	}
 }

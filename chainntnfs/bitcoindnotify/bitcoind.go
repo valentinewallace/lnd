@@ -286,15 +286,15 @@ out:
 					// starting with our currently best known block
 					chainntnfs.Log.Infof("Missed blocks, " +
 						"attempting to catch up")
-					err := b.catchUpOnMissedBlocks(item.Height)
+					err := b.handleMissedBlocks(item.Height)
 					if err != nil {
 						chainntnfs.Log.Error(err)
 						continue
 					}
 				}
 
-				b.bestBlock.Height = item.Height
-				b.bestBlock.Hash = &item.Hash
+				chainntnfs.Log.Infof("New block: height=%v, sha=%v",
+					item.Height, item.Hash)
 
 				err := b.handleBlockConnected(item.Height, item.Hash)
 				if err != nil {
@@ -304,30 +304,16 @@ out:
 
 			case chain.BlockDisconnected:
 				if item.Height != b.bestBlock.Height {
-					chainntnfs.Log.Warnf("Received blocks "+
-						"out of order: current height="+
-						"%d, disconnected height=%d",
-						b.bestBlock.Height, item.Height)
-					continue
+					chainntnfs.Log.Infof("Missed disconnected" +
+						"blocks, attempting to catch up")
 				}
 
-				blockHash, err := b.chainConn.GetBlockHash(int64(item.Height - 1))
+				err := b.rewindChain(item.Height - 1)
 				if err != nil {
-					chainntnfs.Log.Warnf("unable to get hash from block "+
-						"with height=%d: %v", item.Height-1, err)
+					chainntnfs.Log.Errorf("unable to "+
+						"disconnect to height: %v", err)
 				}
-				b.bestBlock.Height = item.Height - 1
-				b.bestBlock.Hash = blockHash
-
-				chainntnfs.Log.Infof("Block disconnected from "+
-					"main chain: height=%v, sha=%v",
-					item.Height, item.Hash)
-
-				err = b.txConfNotifier.DisconnectTip(
-					uint32(item.Height))
-				if err != nil {
-					chainntnfs.Log.Error(err)
-				}
+				continue
 
 			case chain.RelevantTx:
 				b.handleRelevantTx(item, b.bestBlock.Height)
@@ -532,6 +518,12 @@ func (b *BitcoindNotifier) handleBlockConnected(height int32, hash chainhash.Has
 	}
 
 	b.notifyBlockEpochs(height, &hash)
+
+	// Now that the new block was successfully handled,
+	// we can update our best block.
+	b.bestBlock.Height = height
+	b.bestBlock.Hash = &hash
+
 	return nil
 }
 
@@ -867,40 +859,67 @@ func (b *BitcoindNotifier) RegisterBlockEpochNtfn(
 	}
 }
 
-// catchUpOnMissedBlocks is called when the chain backend misses a series of
-// blocks. It dispatches all relevant notifications for the missed blocks.
-func (b *BitcoindNotifier) catchUpOnMissedBlocks(newHeight int32) error {
-	// We want to start catching up at the block after the client's best
-	// known block, to avoid a redundant notification
-	startingHeight := b.bestBlock.Height + 1
+// handleMissedBlocks is called when the chain backend misses a series of
+// blocks. It dispatches all relevant notifications for the missed blocks,
+// handling a reorg if necessary.
+func (b *BitcoindNotifier) handleMissedBlocks(newHeight int32) error {
+	// If a reorg causes our best hash to be incorrect, rewind the chain
+	// so our best block is set to the closest common ancestor, then dispatch
+	// notifications from there
 	hashAtBestHeight, err := b.chainConn.GetBlockHash(int64(b.bestBlock.Height))
 	if err != nil {
 		return fmt.Errorf("unable to find blockhash for height=%d: %v",
 			b.bestBlock.Height, err)
 	}
-
-	// If a reorg causes the hash to be incorrect, determine the height of the
-	// first common parent block between the notifier's view of the chain and the
-	// main chain and dispatch notifications from there
-	if b.bestBlock.Hash != nil && *hashAtBestHeight != *b.bestBlock.Hash {
-		commonAncestorHeight, err := b.getCommonBlockAncestorHeight(
-			*b.bestBlock.Hash,
-			*hashAtBestHeight,
-		)
-		if err != nil {
-			return fmt.Errorf("unable to find common ancestor: %v", err)
-		}
-		startingHeight = commonAncestorHeight + 1
+	commonAncestorHeight, err := b.getCommonBlockAncestorHeight(
+		*b.bestBlock.Hash,
+		*hashAtBestHeight,
+	)
+	if err != nil {
+		return fmt.Errorf("unable to find common ancestor: %v", err)
 	}
-	for height := startingHeight; height < newHeight; height++ {
+	if err := b.rewindChain(commonAncestorHeight); err != nil {
+		return fmt.Errorf("unable to rewind chain: %v", err)
+	}
+
+	// We want to start dispatching historical notifications from the block
+	// right after our best block, to avoid a redundant notification.
+	for height := commonAncestorHeight + 1; height < newHeight; height++ {
 		hash, err := b.chainConn.GetBlockHash(int64(height))
 		if err != nil {
 			return fmt.Errorf("unable to get block hash: %v", err)
 		}
+		chainntnfs.Log.Infof("catching up on missed blocks w/ height %d", height)
 		if err := b.handleBlockConnected(height, *hash); err != nil {
 			return fmt.Errorf("error on handling connected block: %v",
 				err)
 		}
+	}
+	return nil
+}
+
+// rewindChain handles internal state updates associated with disconnected blocks.
+// It has no effect if given a height greater than or equal to our current best
+// known height.
+func (b *BitcoindNotifier) rewindChain(newBestHeight int32) error {
+	for height := b.bestBlock.Height; height > newBestHeight; height-- {
+		hash, err := b.chainConn.GetBlockHash(int64(height - 1))
+		if err != nil {
+			return fmt.Errorf("unable to find blockhash for disconnected height=%d: %v",
+				height, err)
+		}
+
+		chainntnfs.Log.Infof("Block disconnected from main chain: "+
+			"height=%v, sha=%v", height, hash)
+
+		err = b.txConfNotifier.DisconnectTip(uint32(height))
+		if err != nil {
+			return fmt.Errorf("unable to disconnect tip for height=%d: %v",
+				height, err)
+		}
+		// Since we've successfully disconnected, set new best block.
+		b.bestBlock.Height = height - 1
+		b.bestBlock.Hash = hash
 	}
 	return nil
 }
@@ -913,30 +932,27 @@ func (b *BitcoindNotifier) catchUpClientOnBlocks(bestBlock *chainntnfs.BlockEpoc
 	if bestBlock == nil {
 		return nil
 	}
+	if bestBlock.Hash == nil {
+		return fmt.Errorf("can't catch up client on blocks: best block " +
+			"hash is nil")
+	}
 
-	// We want to start catching up at the block after the client's best
-	// known block, to avoid a redundant notification
-	startingHeight := bestBlock.Height + 1
+	// If a reorg causes the client's best hash to be incorrect, retrieve the
+	// closest common ancestor and dispatch notifications from there.
 	hashAtBestHeight, err := b.chainConn.GetBlockHash(int64(bestBlock.Height))
 	if err != nil {
 		return fmt.Errorf("unable to find blockhash for height=%d: %v",
 			bestBlock.Height, err)
 	}
-
-	// If a reorg causes the hash to be incorrect, determine the height of the
-	// first common parent block between the client's view of the chain and the
-	// main chain and dispatch notifications from there
-	if bestBlock.Hash != nil && *hashAtBestHeight != *bestBlock.Hash {
-		commonAncestorHeight, err := b.getCommonBlockAncestorHeight(
-			*bestBlock.Hash,
-			*hashAtBestHeight,
-		)
-		if err != nil {
-			return fmt.Errorf("unable to find common ancestor: %v", err)
-		}
-		startingHeight = commonAncestorHeight + 1
+	commonAncestorHeight, err := b.getCommonBlockAncestorHeight(
+		*bestBlock.Hash,
+		*hashAtBestHeight,
+	)
+	if err != nil {
+		return fmt.Errorf("unable to find common ancestor: %v", err)
 	}
-	for height := startingHeight; height <= b.bestBlock.Height; height++ {
+
+	for height := commonAncestorHeight + 1; height <= b.bestBlock.Height; height++ {
 		hash, err := b.chainConn.GetBlockHash(int64(height))
 		if err != nil {
 			return fmt.Errorf("unable to find blockhash for height=%d: %v",
