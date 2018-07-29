@@ -194,7 +194,7 @@ func newActiveChannelArbitrator(channel *channeldb.OpenChannel,
 	//
 	// TODO(roasbeef): instead 1 block epoch that multi-plexes to the rest?
 	//  * reduces the number of goroutines
-	blockEpoch, err := c.cfg.Notifier.RegisterBlockEpochNtfn()
+	blockEpoch, err := c.cfg.Notifier.RegisterBlockEpochNtfn(nil)
 	if err != nil {
 		return nil, err
 	}
@@ -400,7 +400,7 @@ func (c *ChainArbitrator) Start() error {
 			continue
 		}
 
-		blockEpoch, err := c.cfg.Notifier.RegisterBlockEpochNtfn()
+		blockEpoch, err := c.cfg.Notifier.RegisterBlockEpochNtfn(nil)
 		if err != nil {
 			return err
 		}

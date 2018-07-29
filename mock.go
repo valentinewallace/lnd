@@ -5,15 +5,15 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/lightningnetwork/lnd/chainntnfs"
-	"github.com/lightningnetwork/lnd/keychain"
-	"github.com/lightningnetwork/lnd/lnwallet"
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcutil"
+	"github.com/lightningnetwork/lnd/chainntnfs"
+	"github.com/lightningnetwork/lnd/keychain"
+	"github.com/lightningnetwork/lnd/lnwallet"
 )
 
 // The block height returned by the mock BlockChainIO's GetBestBlock.
@@ -91,7 +91,8 @@ func (m *mockNotfier) RegisterConfirmationsNtfn(txid *chainhash.Hash, numConfs,
 		Confirmed: m.confChannel,
 	}, nil
 }
-func (m *mockNotfier) RegisterBlockEpochNtfn() (*chainntnfs.BlockEpochEvent, error) {
+func (m *mockNotfier) RegisterBlockEpochNtfn(
+	bestBlock *chainntnfs.BlockEpoch) (*chainntnfs.BlockEpochEvent, error) {
 	return &chainntnfs.BlockEpochEvent{
 		Epochs: make(chan *chainntnfs.BlockEpoch),
 		Cancel: func() {},
