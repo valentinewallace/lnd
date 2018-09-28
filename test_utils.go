@@ -333,6 +333,7 @@ func createTestPeer(notifier chainntnfs.ChainNotifier,
 			ChainIO:  chainIO,
 		}, dbAlice,
 	)
+	chainArb.Start()
 	chainArb.WatchNewChannel(aliceChannelState)
 
 	s := &server{
