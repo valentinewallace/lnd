@@ -134,6 +134,10 @@ type ChainArbitratorConfig struct {
 
 	// Sweeper allows resolvers to sweep their final outputs.
 	Sweeper *sweep.UtxoSweeper
+
+	// NotifyClosedChannel is a function closure that the ChainArbitrator
+	// will use to notify the ChannelNotifier about a newly closed channel.
+	NotifyClosedChannel func(*channeldb.ChannelCloseSummary)
 }
 
 // ChainArbitrator is a sub-system that oversees the on-chain resolution of all
@@ -251,10 +255,16 @@ func newActiveChannelArbitrator(channel *channeldb.OpenChannel,
 			return chanMachine.ForceClose()
 		},
 		MarkCommitmentBroadcasted: channel.MarkCommitmentBroadcasted,
-		MarkChannelClosed:         channel.CloseChannel,
-		IsPendingClose:            false,
-		ChainArbitratorConfig:     c.cfg,
-		ChainEvents:               chanEvents,
+		MarkChannelClosed: func(summary *channeldb.ChannelCloseSummary) error {
+			if err := channel.CloseChannel(summary); err != nil {
+				return err
+			}
+			c.cfg.NotifyClosedChannel(summary)
+			return nil
+		},
+		IsPendingClose:        false,
+		ChainArbitratorConfig: c.cfg,
+		ChainEvents:           chanEvents,
 	}
 
 	// The final component needed is an arbitrator log that the arbitrator
@@ -710,13 +720,7 @@ func (c *ChainArbitrator) WatchNewChannel(newChan *channeldb.OpenChannel) error 
 // SubscribeChannelEvents returns a new active subscription for the set of
 // possible on-chain events for a particular channel. The struct can be used by
 // callers to be notified whenever an event that changes the state of the
-// channel on-chain occurs. If syncDispatch is true, then the sender of the
-// notification will wait until an error is sent over the ProcessACK before
-// modifying any database state. This allows callers to request a reliable hand
-// off.
-//
-// TODO(roasbeef): can be used later to provide RPC hook for all channel
-// lifetimes
+// channel on-chain occurs.
 func (c *ChainArbitrator) SubscribeChannelEvents(
 	chanPoint wire.OutPoint) (*ChainEventSubscription, error) {
 
