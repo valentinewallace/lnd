@@ -16,6 +16,7 @@ import (
 	"github.com/lightningnetwork/lnd/build"
 	"github.com/lightningnetwork/lnd/chainntnfs"
 	"github.com/lightningnetwork/lnd/channeldb"
+	"github.com/lightningnetwork/lnd/channelnotifier"
 	"github.com/lightningnetwork/lnd/contractcourt"
 	"github.com/lightningnetwork/lnd/discovery"
 	"github.com/lightningnetwork/lnd/htlcswitch"
@@ -65,6 +66,7 @@ var (
 	cnctLog = build.NewSubLogger("CNCT", backendLog.Logger)
 	sphxLog = build.NewSubLogger("SPHX", backendLog.Logger)
 	swprLog = build.NewSubLogger("SWPR", backendLog.Logger)
+	chnfLog = build.NewSubLogger("CHNF", backendLog.Logger)
 )
 
 // Initialize package-global logger variables.
@@ -82,6 +84,7 @@ func init() {
 	sphinx.UseLogger(sphxLog)
 	signal.UseLogger(ltndLog)
 	sweep.UseLogger(swprLog)
+	channelnotifier.UseLogger(chnfLog)
 }
 
 // subsystemLoggers maps each subsystem identifier to its associated logger.
@@ -105,6 +108,7 @@ var subsystemLoggers = map[string]btclog.Logger{
 	"CNCT": cnctLog,
 	"SPHX": sphxLog,
 	"SWPR": swprLog,
+	"CHNF": chnfLog,
 }
 
 // initLogRotator initializes the logging rotator to write logs to logFile and

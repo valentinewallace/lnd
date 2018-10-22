@@ -28,6 +28,7 @@ import (
 	"github.com/lightningnetwork/lnd/autopilot"
 	"github.com/lightningnetwork/lnd/brontide"
 	"github.com/lightningnetwork/lnd/channeldb"
+	"github.com/lightningnetwork/lnd/channelnotifier"
 	"github.com/lightningnetwork/lnd/contractcourt"
 	"github.com/lightningnetwork/lnd/discovery"
 	"github.com/lightningnetwork/lnd/htlcswitch"
@@ -143,6 +144,8 @@ type server struct {
 	htlcSwitch *htlcswitch.Switch
 
 	invoices *invoiceRegistry
+
+	channelNotifier *channelnotifier.ChannelNotifier
 
 	witnessBeacon contractcourt.WitnessBeacon
 
@@ -261,6 +264,8 @@ func newServer(listenAddrs []net.Addr, chanDB *channeldb.DB, cc *chainControl,
 		cc:     cc,
 
 		invoices: newInvoiceRegistry(chanDB),
+
+		channelNotifier: channelnotifier.New(),
 
 		identityPriv: privKey,
 		nodeSigner:   newNodeSigner(privKey),
@@ -954,6 +959,9 @@ func (s *server) Start() error {
 	if err := s.utxoNursery.Start(); err != nil {
 		return err
 	}
+	if err := s.channelNotifier.Start(); err != nil {
+		return err
+	}
 	if err := s.chainArb.Start(); err != nil {
 		return err
 	}
@@ -1037,6 +1045,7 @@ func (s *server) Stop() error {
 	s.breachArbiter.Stop()
 	s.authGossiper.Stop()
 	s.chainArb.Stop()
+	s.channelNotifier.Stop()
 	s.cc.wallet.Shutdown()
 	s.cc.chainView.Stop()
 	s.connMgr.Stop()
