@@ -336,6 +336,14 @@ service Lightning {
         };
     }
 
+    /** lncli: `subscribechannels`
+    SubscribeChannels creates a uni-directional stream from the server to the
+    client in which any updates relevant to the state of the channels are sent
+    over. Events include new active channels, inactive channels, and closed
+    channels.
+    */
+    rpc SubscribeChannels (ChannelSubscription) returns (stream ChannelUpdate);
+
     /** lncli: `closedchannels`
     ClosedChannels returns a description of all the closed channels that 
     this node was a participant in.
@@ -1302,6 +1310,24 @@ message PendingChannelsResponse {
 
     /// Channels waiting for closing tx to confirm
     repeated WaitingCloseChannel waiting_close_channels = 5 [ json_name = "waiting_close_channels" ];
+}
+
+message ChannelSubscription {
+}
+
+message ChannelUpdate {
+    oneof channel {
+        Channel open_channel = 1 [ json_name = "channel" ];
+        ChannelCloseSummary closed_channel = 2 [ json_name = "closed_channel" ];
+    }
+
+    enum UpdateType {
+         ACTIVE_CHANNEL = 0;
+         INACTIVE_CHANNEL = 1;
+         CLOSED_CHANNEL = 2;
+    }
+
+    UpdateType type = 3 [ json_name = "type" ];
 }
 
 message WalletBalanceRequest {

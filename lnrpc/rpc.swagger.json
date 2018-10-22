@@ -1006,6 +1006,15 @@
       ],
       "default": "COOPERATIVE_CLOSE"
     },
+    "ChannelUpdateUpdateType": {
+      "type": "string",
+      "enum": [
+        "ACTIVE_CHANNEL",
+        "INACTIVE_CHANNEL",
+        "CLOSED_CHANNEL"
+      ],
+      "default": "ACTIVE_CHANNEL"
+    },
     "PendingChannelsResponseClosedChannel": {
       "type": "object",
       "properties": {
@@ -1459,6 +1468,20 @@
           "type": "integer",
           "format": "int64",
           "title": "/ The index of the output of the funding transaction"
+        }
+      }
+    },
+    "lnrpcChannelUpdate": {
+      "type": "object",
+      "properties": {
+        "open_channel": {
+          "$ref": "#/definitions/lnrpcChannel"
+        },
+        "closed_channel": {
+          "$ref": "#/definitions/lnrpcChannelCloseSummary"
+        },
+        "type": {
+          "$ref": "#/definitions/ChannelUpdateUpdateType"
         }
       }
     },
