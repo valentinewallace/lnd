@@ -340,11 +340,13 @@ func newServer(listenAddrs []net.Addr, chanDB *channeldb.DB, cc *chainControl,
 					pubKey[:], err)
 			}
 		},
-		FwdingLog:              chanDB.ForwardingLog(),
-		SwitchPackager:         channeldb.NewSwitchPackager(),
-		ExtractErrorEncrypter:  s.sphinx.ExtractErrorEncrypter,
-		FetchLastChannelUpdate: s.fetchLastChanUpdate(),
-		Notifier:               s.cc.chainNotifier,
+		FwdingLog:                  chanDB.ForwardingLog(),
+		SwitchPackager:             channeldb.NewSwitchPackager(),
+		ExtractErrorEncrypter:      s.sphinx.ExtractErrorEncrypter,
+		FetchLastChannelUpdate:     s.fetchLastChanUpdate(),
+		Notifier:                   s.cc.chainNotifier,
+		NotifyActiveChannelEvent:   s.channelNotifier.NotifyActiveChannelEvent,
+		NotifyInactiveChannelEvent: s.channelNotifier.NotifyInactiveChannelEvent,
 		FwdEventTicker: ticker.New(
 			htlcswitch.DefaultFwdEventInterval),
 		LogEventTicker: ticker.New(

@@ -169,6 +169,14 @@ type Config struct {
 	// the switch when a new block has arrived.
 	Notifier chainntnfs.ChainNotifier
 
+	// NotifyActiveChannelEvent is a function closure that the HtlcSwitch
+	// uses to notify the ChannelNotifier about a newly active channel.
+	NotifyActiveChannelEvent func(*channeldb.OpenChannel)
+
+	// NotifyInactiveChannelEvent is a function closure that the HtlcSwitch
+	// uses to notify the ChannelNotifier about a newly inactive channel.
+	NotifyInactiveChannelEvent func(*channeldb.OpenChannel)
+
 	// FwdEventTicker is a signal that instructs the htlcswitch to flush any
 	// pending forwarding events.
 	FwdEventTicker ticker.Ticker
@@ -1932,6 +1940,18 @@ func (s *Switch) AddLink(link ChannelLink) error {
 		)
 	}
 
+	// Since the link addition has succeeded, this channel is now officially
+	// active and we can tell the ChannelNotifier about it.
+	peerPub := link.Peer().PubKey()
+	channel, err := s.cfg.DB.FetchOpenChannel(peerPub[:], link.ChannelPoint())
+	if err != nil {
+		log.Warnf("errored fetching channel with channelpoint=%v: %v",
+			link.ChannelPoint(), err)
+		return nil
+	}
+
+	s.cfg.NotifyActiveChannelEvent(channel)
+
 	return nil
 }
 
@@ -2024,6 +2044,18 @@ func (s *Switch) removeLink(chanID lnwire.ChannelID) ChannelLink {
 		return nil
 	}
 
+	// We can now tell the ChannelNotifier that the channel corresponding to this
+	// link is no longer active.
+	peerPub := link.Peer().PubKey()
+	channel, err := s.cfg.DB.FetchOpenChannel(peerPub[:], link.ChannelPoint())
+	switch err {
+	case nil:
+		s.cfg.NotifyInactiveChannelEvent(channel)
+	default:
+		log.Warnf("errored fetching channel with channelpoint=%v: %v",
+			link.ChannelPoint(), err)
+	}
+
 	// Remove the channel from live link indexes.
 	delete(s.pendingLinkIndex, link.ChanID())
 	delete(s.linkIndex, link.ChanID())
@@ -2031,7 +2063,6 @@ func (s *Switch) removeLink(chanID lnwire.ChannelID) ChannelLink {
 
 	// If the link has been added to the peer index, then we'll move to
 	// delete the entry within the index.
-	peerPub := link.Peer().PubKey()
 	if peerIndex, ok := s.interfaceIndex[peerPub]; ok {
 		delete(peerIndex, link.ChanID())
 
