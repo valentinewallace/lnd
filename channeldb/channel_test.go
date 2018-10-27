@@ -651,6 +651,82 @@ func TestChannelStateTransition(t *testing.T) {
 	}
 }
 
+func TestFetchOpenChannel(t *testing.T) {
+	t.Parallel()
+
+	cdb, cleanUp, err := makeTestDB()
+	if err != nil {
+		t.Fatalf("unable to make test database: %v", err)
+	}
+	defer cleanUp()
+
+	// Create test channel state.
+	state, err := createTestChannelState(cdb)
+	if err != nil {
+		t.Fatalf("unable to create channel state: %v", err)
+	}
+
+	state.LocalCommitment.Htlcs = []HTLC{
+		{
+			Signature:     testSig.Serialize(),
+			Incoming:      true,
+			Amt:           10,
+			RHash:         key,
+			RefundTimeout: 1,
+			OnionBlob:     []byte("onionblob"),
+		},
+	}
+	state.RemoteCommitment.Htlcs = []HTLC{
+		{
+			Signature:     testSig.Serialize(),
+			Incoming:      false,
+			Amt:           10,
+			RHash:         key,
+			RefundTimeout: 1,
+			OnionBlob:     []byte("onionblob"),
+		},
+	}
+	if err := state.FullSync(); err != nil {
+		t.Fatalf("unable to save and serialize channel state: %v", err)
+	}
+
+	pubKey := state.IdentityPub.SerializeCompressed()
+	openChannel, err := cdb.FetchOpenChannel(pubKey, testOutpoint)
+
+	// The decoded channel state should be identical to what we stored
+	// above.
+	if !reflect.DeepEqual(state, openChannel) {
+		t.Fatalf("channel state doesn't match:: %v vs %v",
+			spew.Sdump(state), spew.Sdump(openChannel))
+	}
+
+	// Finally to wrap up the test, delete the state of the channel within
+	// the database. This involves "closing" the channel which removes all
+	// written state, and creates a small "summary" elsewhere within the
+	// database.
+	closeSummary := &ChannelCloseSummary{
+		ChanPoint:         state.FundingOutpoint,
+		RemotePub:         state.IdentityPub,
+		SettledBalance:    btcutil.Amount(500),
+		TimeLockedBalance: btcutil.Amount(10000),
+		IsPending:         false,
+		CloseType:         CooperativeClose,
+	}
+	if err := state.CloseChannel(closeSummary); err != nil {
+		t.Fatalf("unable to close channel: %v", err)
+	}
+
+	// As the channel is now closed, attempting to fetch it from the db
+	// should error.
+	openChannel, err = cdb.FetchOpenChannel(pubKey, testOutpoint)
+	if err == nil {
+		t.Fatalf("fetching nonexistent open channel did not error")
+	}
+	if openChannel != nil {
+		t.Fatalf("open channel was not deleted on close, found %v", openChannel)
+	}
+}
+
 func TestFetchPendingChannels(t *testing.T) {
 	t.Parallel()
 

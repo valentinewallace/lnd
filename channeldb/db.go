@@ -288,6 +288,88 @@ func fileExists(path string) bool {
 	return true
 }
 
+// FetchOpenChannel starts a new database transaction and returns the stored
+// active/open channel associated with the target nodeID and channel ID. In the
+// case that there is no channel matching this criteria, an error is returned.
+// In the case that we fail to fetch any open channels, an error is returned.
+func (d *DB) FetchOpenChannel(nodeID []byte,
+	chanPoint *wire.OutPoint) (*OpenChannel, error) {
+
+	var (
+		channel        *OpenChannel
+		chanPointBytes bytes.Buffer
+		err            error
+	)
+
+	// We need the channel point as bytes to fetch the channel bucket that
+	// it corresponds to.
+	if err = writeOutpoint(&chanPointBytes, chanPoint); err != nil {
+		return nil, err
+	}
+
+	err = d.View(func(tx *bolt.Tx) error {
+		// Get the bucket dedicated to storing the metadata for open
+		// channels
+		openChanBucket := tx.Bucket(openChannelBucket)
+		if openChanBucket == nil {
+			return ErrNoActiveChannels
+		}
+
+		// Next, fetch the bucket dedicated to storing channel metadata
+		// for only the channels of a specific node.
+		nodeChanBucket := openChanBucket.Bucket(nodeID[:])
+		if nodeChanBucket == nil {
+			return fmt.Errorf("unable to read chain hashes for "+
+				"node_key=%x", nodeID)
+		}
+
+		// Finally, check each of the node's chainhash buckets for the
+		// desired channel.
+		return nodeChanBucket.ForEach(func(chainHash, v []byte) error {
+			// If there's a value, it's not a bucket so ignore it.
+			if v != nil {
+				return nil
+			}
+
+			// If we've found a valid chainhash bucket, then we'll
+			// retrieve it so that we try to extract the desired
+			// channel bucket.
+			chainBucket := nodeChanBucket.Bucket(chainHash)
+			if chainBucket == nil {
+				return nil
+			}
+
+			// If the current chainhash bucket does contain the
+			// desired channel, then retrieve the bucket to get
+			// the channel from it.
+			chanBucket := chainBucket.Bucket(chanPointBytes.Bytes())
+			if chanBucket == nil {
+				return nil
+			}
+
+			// Finally, with desired channel bucket retrieved, fetch
+			// the *channeldb.OpenChannel that corresponds to it.
+			channel, err = fetchOpenChannel(chanBucket, chanPoint)
+			return err
+		})
+	})
+
+	// If our database transaction errored, return the error.
+	if err != nil {
+		return nil, err
+	}
+
+	// If we failed to locate the channel, error.
+	if channel == nil {
+		return nil, fmt.Errorf("unable to find channel with outpoint=%v", chanPoint)
+	}
+
+	// We successfully located the channel, so assign its Db field and
+	// return it.
+	channel.Db = d
+	return channel, nil
+}
+
 // FetchOpenChannels starts a new database transaction and returns all stored
 // currently active/open channels associated with the target nodeID. In the case
 // that no active channels are known to have been created with this node, then a
