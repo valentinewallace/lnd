@@ -5288,13 +5288,26 @@ func testInvoiceSubscriptions(net *lntest.NetworkHarness, t *harnessTest) {
 	closeChannelAndAssert(ctxt, t, net, net.Alice, chanPoint, false)
 }
 
-// testBasicChannelCreation test multiple channel opening and closing.
-func testBasicChannelCreation(net *lntest.NetworkHarness, t *harnessTest) {
+// testBasicChannelCreationAndUpdates tests multiple channel opening and closing,
+// and ensures that if a node is subscribed to channel updates they will be
+// received correctly for both cooperative and force closed channels.
+func testBasicChannelCreationAndUpdates(net *lntest.NetworkHarness, t *harnessTest) {
 	const (
 		numChannels = 2
 		timeout     = time.Duration(time.Second * 5)
 		amount      = maxBtcFundingAmount
 	)
+
+	// Subscribe Bob to channel updates so we can test that he receives them
+	// correctly.
+	req := &lnrpc.ChannelSubscription{}
+	ctx, cancelBobSubscription := context.WithCancel(context.Background())
+	defer cancelBobSubscription()
+
+	bobChannelSubscription, err := net.Bob.SubscribeChannels(ctx, req)
+	if err != nil {
+		t.Fatalf("unable to subscribe to bob's channel updates: %v", err)
+	}
 
 	// Open the channel between Alice and Bob, asserting that the
 	// channel has been properly open on-chain.
@@ -5307,13 +5320,158 @@ func testBasicChannelCreation(net *lntest.NetworkHarness, t *harnessTest) {
 				Amt: amount,
 			},
 		)
+
+		// Since the channel just became open, we should receive an active
+		// notification.
+		activeChannelUpdate, err := bobChannelSubscription.Recv()
+		if err != nil {
+			t.Fatalf("unable to recv channel update: %v", err)
+		}
+
+		switch chanUpdate := activeChannelUpdate.Channel.(type) {
+		case *lnrpc.ChannelUpdate_OpenChannel:
+			if !chanUpdate.OpenChannel.Active ||
+				activeChannelUpdate.Type != lnrpc.ChannelUpdate_ACTIVE_CHANNEL {
+				t.Fatalf("channel not active but should be")
+			}
+		default:
+			t.Fatalf("channel update channel of wrong type, expected OpenChannel,"+
+				"got: %T", chanUpdate)
+		}
 	}
 
-	// Close the channel between Alice and Bob, asserting that the
-	// channel has been properly closed on-chain.
-	for _, chanPoint := range chanPoints {
+	// Subscribe Alice to channel updates so we can test that both remote
+	// and local force close notifications are received correctly.
+	aliceReq := &lnrpc.ChannelSubscription{}
+	ctx, cancelAliceSubscription := context.WithCancel(context.Background())
+	defer cancelAliceSubscription()
+
+	aliceChannelSubscription, err := net.Alice.SubscribeChannels(ctx, aliceReq)
+	if err != nil {
+		t.Fatalf("unable to subscribe to alice's channel updates: %v", err)
+	}
+
+	// Close the channel between Alice and Bob, asserting that the channel
+	// has been properly closed on-chain and ensuring that the correct
+	// notifications are received.
+	for i, chanPoint := range chanPoints {
 		ctx, _ := context.WithTimeout(context.Background(), timeout)
-		closeChannelAndAssert(ctx, t, net, net.Alice, chanPoint, false)
+
+		// Force close half of the channels.
+		var force bool
+		switch {
+		case i%1 == 0:
+			force = true
+		default:
+			force = false
+		}
+		closeChannelAndAssert(ctx, t, net, net.Alice, chanPoint, force)
+
+		// Since the channel just became inactive, we should receive an
+		// inactive notification from each subscription.
+		inactiveChannelUpdate, err := bobChannelSubscription.Recv()
+		if err != nil {
+			t.Fatalf("unable to recv channel update: %v", err)
+		}
+
+		switch chanUpdate := inactiveChannelUpdate.Channel.(type) {
+		case *lnrpc.ChannelUpdate_OpenChannel:
+			if chanUpdate.OpenChannel.Active ||
+				inactiveChannelUpdate.Type != lnrpc.ChannelUpdate_INACTIVE_CHANNEL {
+				t.Fatalf("channel is active but shouldn't be")
+			}
+		default:
+			t.Fatalf("channel update channel of wrong type, expected OpenChannel,"+
+				"got: %T", chanUpdate)
+		}
+
+		// Ensure Alice also receives an inactive notification.
+		inactiveChannelUpdate, err = aliceChannelSubscription.Recv()
+		if err != nil {
+			t.Fatalf("unable to recv channel update: %v", err)
+		}
+
+		switch chanUpdate := inactiveChannelUpdate.Channel.(type) {
+		case *lnrpc.ChannelUpdate_OpenChannel:
+			if chanUpdate.OpenChannel.Active ||
+				inactiveChannelUpdate.Type != lnrpc.ChannelUpdate_INACTIVE_CHANNEL {
+				t.Fatalf("channel is active but shouldn't be")
+			}
+		default:
+			t.Fatalf("channel update channel of wrong type, expected OpenChannel,"+
+				"got: %T", chanUpdate)
+		}
+
+		// If the channel was force closed, expect to receive a local
+		// force close notification from Alice's subscription and a
+		// remote force close from Bob's subscription. If the channel
+		// was cooperatively closed, expect to receive a cooperative
+		// close notification from each subscription.
+		closedChannelUpdate, err := bobChannelSubscription.Recv()
+		if err != nil {
+			t.Fatalf("unable to recv channel update: %v", err)
+		}
+
+		switch chanUpdate := closedChannelUpdate.Channel.(type) {
+		case *lnrpc.ChannelUpdate_ClosedChannel:
+			switch force {
+			case true:
+				// Ensure we've received a notification for the
+				// force closed channel with the correct
+				// notification type.
+				if chanUpdate.ClosedChannel.CloseType != lnrpc.ChannelCloseSummary_REMOTE_FORCE_CLOSE ||
+					closedChannelUpdate.Type != lnrpc.ChannelUpdate_CLOSED_CHANNEL {
+					t.Fatalf("wrong closure type for closed channel: %v",
+						chanUpdate.ClosedChannel.CloseType)
+				}
+			case false:
+				// Ensure we've received a notification for the
+				// cooperatively closed channel with the correct
+				// notification type.
+				if chanUpdate.ClosedChannel.CloseType != lnrpc.ChannelCloseSummary_COOPERATIVE_CLOSE ||
+					closedChannelUpdate.Type != lnrpc.ChannelUpdate_CLOSED_CHANNEL {
+					t.Fatalf("wrong closure type for closed channel: %v",
+						chanUpdate.ClosedChannel.CloseType)
+				}
+			}
+		default:
+			t.Fatalf("channel update channel of wrong type, expected ClosedChannel,"+
+				"got: %T", chanUpdate)
+		}
+
+		// Finally, ensure Alice receives the correct channel closing
+		// notification.
+		closedChannelUpdate, err = aliceChannelSubscription.Recv()
+		if err != nil {
+			t.Fatalf("unable to recv channel update: %v", err)
+		}
+
+		switch chanUpdate := closedChannelUpdate.Channel.(type) {
+		case *lnrpc.ChannelUpdate_ClosedChannel:
+			switch force {
+			case true:
+				// Ensure we've received a notification for the
+				// force closed channel with the correct
+				// notification type.
+				if chanUpdate.ClosedChannel.CloseType != lnrpc.ChannelCloseSummary_LOCAL_FORCE_CLOSE ||
+					closedChannelUpdate.Type != lnrpc.ChannelUpdate_CLOSED_CHANNEL {
+					t.Fatalf("wrong closure type for closed channel: %v",
+						chanUpdate.ClosedChannel.CloseType)
+				}
+			case false:
+				// Ensure we've received a notification for the
+				// cooperatively closed channel with the correct
+				// notification type.
+				if chanUpdate.ClosedChannel.CloseType != lnrpc.ChannelCloseSummary_COOPERATIVE_CLOSE ||
+					closedChannelUpdate.Type != lnrpc.ChannelUpdate_CLOSED_CHANNEL {
+					t.Fatalf("wrong closure type for closed channel: %v",
+						chanUpdate.ClosedChannel.CloseType)
+				}
+			}
+		default:
+			t.Fatalf("channel update channel of wrong type, expected ClosedChannel,"+
+				"got: %T", chanUpdate)
+		}
 	}
 }
 
@@ -12365,8 +12523,8 @@ var testsCases = []*testCase{
 		test: testMultiHopOverPrivateChannels,
 	},
 	{
-		name: "multiple channel creation",
-		test: testBasicChannelCreation,
+		name: "multiple channel creation and update subscription",
+		test: testBasicChannelCreationAndUpdates,
 	},
 	{
 		name: "invoice update subscription",
