@@ -26,6 +26,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/lightningnetwork/lnd/build"
 	"github.com/lightningnetwork/lnd/channeldb"
+	"github.com/lightningnetwork/lnd/channelnotifier"
 	"github.com/lightningnetwork/lnd/htlcswitch"
 	"github.com/lightningnetwork/lnd/lnrpc"
 	"github.com/lightningnetwork/lnd/lnwallet"
@@ -223,6 +224,10 @@ var (
 			Action: "read",
 		}},
 		"/lnrpc.Lightning/ListChannels": {{
+			Entity: "offchain",
+			Action: "read",
+		}},
+		"/lnrpc.Lightning/SubscribeChannels": {{
 			Entity: "offchain",
 			Action: "read",
 		}},
@@ -1965,7 +1970,63 @@ func createRPCClosedChannel(
 	}
 }
 
-	return resp, nil
+// SubscribeChannels returns a uni-directional stream (server -> client) for
+// notifying the client of newly active, inactive or closed channels.
+func (r *rpcServer) SubscribeChannels(req *lnrpc.ChannelSubscription,
+	updateStream lnrpc.Lightning_SubscribeChannelsServer) error {
+
+	channelEventSub, err := r.server.channelNotifier.SubscribeChannelEvents()
+	if err != nil {
+		return err
+	}
+
+	// Ensure that the resources for the client is cleaned up once either
+	// the server, or client exits.
+	defer channelEventSub.Cancel()
+
+	graph := r.server.chanDB.ChannelGraph()
+
+	for {
+		select {
+		// A new update has been sent by the channel router, we'll
+		// marshal it into the form expected by the gRPC client, then
+		// send it off to the client(s).
+		case e := <-channelEventSub.Updates():
+			var update *lnrpc.ChannelUpdate
+			switch event := e.(type) {
+			case channelnotifier.ActiveChannelEvent:
+				channel := createRPCChannel(r, graph, event.Channel, true)
+				update = &lnrpc.ChannelUpdate{
+					Type: lnrpc.ChannelUpdate_ACTIVE_CHANNEL,
+					Channel: &lnrpc.ChannelUpdate_OpenChannel{
+						OpenChannel: channel,
+					},
+				}
+			case channelnotifier.InactiveChannelEvent:
+				channel := createRPCChannel(r, graph, event.Channel, false)
+				update = &lnrpc.ChannelUpdate{
+					Type: lnrpc.ChannelUpdate_INACTIVE_CHANNEL,
+					Channel: &lnrpc.ChannelUpdate_OpenChannel{
+						OpenChannel: channel,
+					},
+				}
+			case channelnotifier.ClosedChannelEvent:
+				closedChannel := createRPCClosedChannel(event.CloseSummary)
+				update = &lnrpc.ChannelUpdate{
+					Type: lnrpc.ChannelUpdate_CLOSED_CHANNEL,
+					Channel: &lnrpc.ChannelUpdate_ClosedChannel{
+						ClosedChannel: closedChannel,
+					},
+				}
+			}
+
+			if err := updateStream.Send(update); err != nil {
+				return err
+			}
+		case <-r.quit:
+			return nil
+		}
+	}
 }
 
 // savePayment saves a successfully completed payment to the database for
