@@ -298,16 +298,15 @@ func (d *DB) FetchOpenChannel(nodeID []byte,
 	var (
 		channel        *OpenChannel
 		chanPointBytes bytes.Buffer
-		err            error
 	)
 
 	// We need the channel point as bytes to fetch the channel bucket that
 	// it corresponds to.
-	if err = writeOutpoint(&chanPointBytes, chanPoint); err != nil {
+	if err := writeOutpoint(&chanPointBytes, chanPoint); err != nil {
 		return nil, err
 	}
 
-	err = d.View(func(tx *bolt.Tx) error {
+	if err := d.View(func(tx *bolt.Tx) error {
 		// Get the bucket dedicated to storing the metadata for open
 		// channels
 		openChanBucket := tx.Bucket(openChannelBucket)
@@ -349,13 +348,11 @@ func (d *DB) FetchOpenChannel(nodeID []byte,
 
 			// Finally, with desired channel bucket retrieved, fetch
 			// the *channeldb.OpenChannel that corresponds to it.
+			var err error
 			channel, err = fetchOpenChannel(chanBucket, chanPoint)
 			return err
 		})
-	})
-
-	// If our database transaction errored, return the error.
-	if err != nil {
+	}); err != nil {
 		return nil, err
 	}
 

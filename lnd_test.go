@@ -5324,6 +5324,7 @@ func testBasicChannelCreationAndUpdates(net *lntest.NetworkHarness, t *harnessTe
 		// Since the channel just became open, we should receive an active
 		// notification.
 		activeChannelUpdate, err := bobChannelSubscription.Recv()
+		fmt.Printf("activeChannelUpdate: %v\n", activeChannelUpdate)
 		if err != nil {
 			t.Fatalf("unable to recv channel update: %v", err)
 		}
@@ -5367,26 +5368,9 @@ func testBasicChannelCreationAndUpdates(net *lntest.NetworkHarness, t *harnessTe
 		}
 		closeChannelAndAssert(ctx, t, net, net.Alice, chanPoint, force)
 
-		// Since the channel just became inactive, we should receive an
-		// inactive notification from each subscription.
-		inactiveChannelUpdate, err := bobChannelSubscription.Recv()
-		if err != nil {
-			t.Fatalf("unable to recv channel update: %v", err)
-		}
-
-		switch chanUpdate := inactiveChannelUpdate.Channel.(type) {
-		case *lnrpc.ChannelUpdate_OpenChannel:
-			if chanUpdate.OpenChannel.Active ||
-				inactiveChannelUpdate.Type != lnrpc.ChannelUpdate_INACTIVE_CHANNEL {
-				t.Fatalf("channel is active but shouldn't be")
-			}
-		default:
-			t.Fatalf("channel update channel of wrong type, expected OpenChannel,"+
-				"got: %T", chanUpdate)
-		}
-
-		// Ensure Alice also receives an inactive notification.
-		inactiveChannelUpdate, err = aliceChannelSubscription.Recv()
+		// Ensure Alice receives an inactive notification since she is
+		// the one closing.
+		inactiveChannelUpdate, err := aliceChannelSubscription.Recv()
 		if err != nil {
 			t.Fatalf("unable to recv channel update: %v", err)
 		}

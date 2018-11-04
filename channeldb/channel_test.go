@@ -692,6 +692,9 @@ func TestFetchOpenChannel(t *testing.T) {
 
 	pubKey := state.IdentityPub.SerializeCompressed()
 	openChannel, err := cdb.FetchOpenChannel(pubKey, testOutpoint)
+	if err != nil {
+		t.Fatalf("unable to fetch channel: %v", err)
+	}
 
 	// The decoded channel state should be identical to what we stored
 	// above.

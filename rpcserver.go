@@ -1836,7 +1836,11 @@ func (r *rpcServer) ListChannels(ctx context.Context,
 		// Next, we'll determine whether we should add this channel to
 		// our list depending on the type of channels requested to us.
 		isActive := peerOnline && linkActive
-		channel := createRPCChannel(r, graph, dbChannel, isActive)
+		channel, err := createRPCOpenChannel(r, graph, dbChannel, isActive)
+		if err != nil {
+			rpcsLog.Warnf("unable to create lnrpc channel: %v", err)
+			continue
+		}
 
 		// We'll only skip returning this channel if we were requested
 		// for a specific kind and this channel doesn't satisfy it.
@@ -1857,9 +1861,9 @@ func (r *rpcServer) ListChannels(ctx context.Context,
 	return resp, nil
 }
 
-// createRPCChannel creates an *lnrpc.Channel from the *channeldb.Channel.
-func createRPCChannel(r *rpcServer, graph *channeldb.ChannelGraph,
-	dbChannel *channeldb.OpenChannel, isActive bool) *lnrpc.Channel {
+// createRPCOpenChannel creates an *lnrpc.Channel from the *channeldb.Channel.
+func createRPCOpenChannel(r *rpcServer, graph *channeldb.ChannelGraph,
+	dbChannel *channeldb.OpenChannel, isActive bool) (*lnrpc.Channel, error) {
 
 	nodePub := dbChannel.IdentityPub
 	nodeID := hex.EncodeToString(nodePub.SerializeCompressed())
@@ -1868,7 +1872,11 @@ func createRPCChannel(r *rpcServer, graph *channeldb.ChannelGraph,
 	// With the channel point known, retrieve the network channel
 	// ID from the database.
 	var chanID uint64
-	chanID, _ = graph.ChannelID(&chanPoint)
+	chanID, err := graph.ChannelID(&chanPoint)
+	if err != nil {
+		fmt.Printf("createRPCOpenChannel: err: %v\n", err)
+		return nil, err
+	}
 
 	// Next, we'll determine whether the channel is public or not.
 	isPublic := dbChannel.ChannelFlags&lnwire.FFAnnounceChannel != 0
@@ -1929,7 +1937,7 @@ func createRPCChannel(r *rpcServer, graph *channeldb.ChannelGraph,
 		}
 	}
 
-	return channel
+	return channel, nil
 }
 
 // createRPCClosedChannel creates an *lnrpc.ClosedChannelSummary from a
@@ -1995,7 +2003,13 @@ func (r *rpcServer) SubscribeChannels(req *lnrpc.ChannelSubscription,
 			var update *lnrpc.ChannelUpdate
 			switch event := e.(type) {
 			case channelnotifier.ActiveChannelEvent:
-				channel := createRPCChannel(r, graph, event.Channel, true)
+				channel, err := createRPCOpenChannel(r, graph,
+					event.Channel, true)
+				if err != nil {
+					rpcsLog.Warnf("unable to create lnrpc channel: %v", err)
+					continue
+				}
+
 				update = &lnrpc.ChannelUpdate{
 					Type: lnrpc.ChannelUpdate_ACTIVE_CHANNEL,
 					Channel: &lnrpc.ChannelUpdate_OpenChannel{
@@ -2003,7 +2017,13 @@ func (r *rpcServer) SubscribeChannels(req *lnrpc.ChannelSubscription,
 					},
 				}
 			case channelnotifier.InactiveChannelEvent:
-				channel := createRPCChannel(r, graph, event.Channel, false)
+				channel, err := createRPCOpenChannel(r, graph,
+					event.Channel, false)
+				if err != nil {
+					rpcsLog.Warnf("unable to create lnrpc channel: %v", err)
+					continue
+				}
+
 				update = &lnrpc.ChannelUpdate{
 					Type: lnrpc.ChannelUpdate_INACTIVE_CHANNEL,
 					Channel: &lnrpc.ChannelUpdate_OpenChannel{

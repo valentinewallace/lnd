@@ -11,10 +11,10 @@ import (
 // events pipe through. It takes subscriptions for its events, and whenever
 // it receives a new event it notifies its subscribers over the proper channel.
 type ChannelNotifier struct {
-	ntfnServer *subscribe.Server
-
 	started uint32
 	stopped uint32
+
+	ntfnServer *subscribe.Server
 }
 
 // ActiveChannelEvent represents a new event where a channel becomes active.

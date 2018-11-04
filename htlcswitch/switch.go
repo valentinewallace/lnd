@@ -1469,7 +1469,7 @@ func (s *Switch) htlcForwarder() {
 		var linksToStop []ChannelLink
 		s.indexMtx.Lock()
 		for _, link := range s.linkIndex {
-			activeLink := s.removeLink(link.ChanID())
+			activeLink, _ := s.removeLink(link.ChanID())
 			if activeLink == nil {
 				log.Errorf("unable to remove ChannelLink(%v) "+
 					"on stop", link.ChanID())
@@ -1478,7 +1478,7 @@ func (s *Switch) htlcForwarder() {
 			linksToStop = append(linksToStop, activeLink)
 		}
 		for _, link := range s.pendingLinkIndex {
-			pendingLink := s.removeLink(link.ChanID())
+			pendingLink, _ := s.removeLink(link.ChanID())
 			if pendingLink == nil {
 				log.Errorf("unable to remove ChannelLink(%v) "+
 					"on stop", link.ChanID())
@@ -1907,7 +1907,7 @@ func (s *Switch) AddLink(link ChannelLink) error {
 	chanID := link.ChanID()
 
 	// First, ensure that this link is not already active in the switch.
-	_, err := s.getLink(chanID)
+	_, _, err := s.getLink(chanID)
 	if err == nil {
 		return fmt.Errorf("unable to add ChannelLink(%v), already "+
 			"active", chanID)
@@ -1940,18 +1940,6 @@ func (s *Switch) AddLink(link ChannelLink) error {
 		)
 	}
 
-	// Since the link addition has succeeded, this channel is now officially
-	// active and we can tell the ChannelNotifier about it.
-	peerPub := link.Peer().PubKey()
-	channel, err := s.cfg.DB.FetchOpenChannel(peerPub[:], link.ChannelPoint())
-	if err != nil {
-		log.Warnf("errored fetching channel with channelpoint=%v: %v",
-			link.ChannelPoint(), err)
-		return nil
-	}
-
-	s.cfg.NotifyActiveChannelEvent(channel)
-
 	return nil
 }
 
@@ -1972,6 +1960,16 @@ func (s *Switch) addLiveLink(link ChannelLink) {
 		s.interfaceIndex[peerPub] = make(map[lnwire.ChannelID]ChannelLink)
 	}
 	s.interfaceIndex[peerPub][link.ChanID()] = link
+
+	// Since the link addition has succeeded, this channel is now officially
+	// active and we can tell the ChannelNotifier about it.
+	channel, err := s.cfg.DB.FetchOpenChannel(peerPub[:], link.ChannelPoint())
+	if err != nil {
+		log.Warnf("errored fetching channel with channelpoint=%v: %v",
+			link.ChannelPoint(), err)
+	}
+
+	s.cfg.NotifyActiveChannelEvent(channel)
 }
 
 // GetLink is used to initiate the handling of the get link command. The
@@ -1980,21 +1978,23 @@ func (s *Switch) GetLink(chanID lnwire.ChannelID) (ChannelLink, error) {
 	s.indexMtx.RLock()
 	defer s.indexMtx.RUnlock()
 
-	return s.getLink(chanID)
+	link, _, err := s.getLink(chanID)
+	return link, err
 }
 
 // getLink returns the link stored in either the pending index or the live
-// lindex.
-func (s *Switch) getLink(chanID lnwire.ChannelID) (ChannelLink, error) {
+// index and whether the link is live.
+func (s *Switch) getLink(chanID lnwire.ChannelID) (ChannelLink, bool, error) {
 	link, ok := s.linkIndex[chanID]
 	if !ok {
 		link, ok = s.pendingLinkIndex[chanID]
 		if !ok {
-			return nil, ErrChannelLinkNotFound
+			return nil, false, ErrChannelLinkNotFound
 		}
+		return link, false, nil
 	}
 
-	return link, nil
+	return link, true, nil
 }
 
 // getLinkByShortID attempts to return the link which possesses the target
@@ -2025,35 +2025,39 @@ func (s *Switch) HasActiveLink(chanID lnwire.ChannelID) bool {
 // returns after the link has been completely shutdown.
 func (s *Switch) RemoveLink(chanID lnwire.ChannelID) {
 	s.indexMtx.Lock()
-	link := s.removeLink(chanID)
+	link, wasLive := s.removeLink(chanID)
 	s.indexMtx.Unlock()
+
+	// Only tell the ChannelNotifier that this channel is inactive if it
+	// was previously live.
+	if wasLive {
+		peerPub := link.Peer().PubKey()
+		channel, err := s.cfg.DB.FetchOpenChannel(peerPub[:], link.ChannelPoint())
+		switch err {
+		case nil:
+			s.cfg.NotifyInactiveChannelEvent(channel)
+		default:
+			log.Warnf("unable to fetch channel with channelpoint=%v: %v",
+				link.ChannelPoint(), err)
+		}
+	}
 
 	if link != nil {
 		link.Stop()
 	}
+
 }
 
 // removeLink is used to remove and stop the channel link.
 //
 // NOTE: This MUST be called with the indexMtx held.
-func (s *Switch) removeLink(chanID lnwire.ChannelID) ChannelLink {
+// note: change to also return wasLive, then can notify based on that in RemoveLink^
+func (s *Switch) removeLink(chanID lnwire.ChannelID) (ChannelLink, bool) {
 	log.Infof("Removing channel link with ChannelID(%v)", chanID)
 
-	link, err := s.getLink(chanID)
+	link, live, err := s.getLink(chanID)
 	if err != nil {
-		return nil
-	}
-
-	// We can now tell the ChannelNotifier that the channel corresponding to this
-	// link is no longer active.
-	peerPub := link.Peer().PubKey()
-	channel, err := s.cfg.DB.FetchOpenChannel(peerPub[:], link.ChannelPoint())
-	switch err {
-	case nil:
-		s.cfg.NotifyInactiveChannelEvent(channel)
-	default:
-		log.Warnf("errored fetching channel with channelpoint=%v: %v",
-			link.ChannelPoint(), err)
+		return nil, false
 	}
 
 	// Remove the channel from live link indexes.
@@ -2063,6 +2067,7 @@ func (s *Switch) removeLink(chanID lnwire.ChannelID) ChannelLink {
 
 	// If the link has been added to the peer index, then we'll move to
 	// delete the entry within the index.
+	peerPub := link.Peer().PubKey()
 	if peerIndex, ok := s.interfaceIndex[peerPub]; ok {
 		delete(peerIndex, link.ChanID())
 
@@ -2073,7 +2078,7 @@ func (s *Switch) removeLink(chanID lnwire.ChannelID) ChannelLink {
 		}
 	}
 
-	return link
+	return link, live
 }
 
 // UpdateShortChanID updates the short chan ID for an existing channel. This is

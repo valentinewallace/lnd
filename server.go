@@ -953,6 +953,9 @@ func (s *server) Start() error {
 	if err := s.cc.chainNotifier.Start(); err != nil {
 		return err
 	}
+	if err := s.channelNotifier.Start(); err != nil {
+		return err
+	}
 	if err := s.sphinx.Start(); err != nil {
 		return err
 	}
@@ -960,9 +963,6 @@ func (s *server) Start() error {
 		return err
 	}
 	if err := s.utxoNursery.Start(); err != nil {
-		return err
-	}
-	if err := s.channelNotifier.Start(); err != nil {
 		return err
 	}
 	if err := s.chainArb.Start(); err != nil {
