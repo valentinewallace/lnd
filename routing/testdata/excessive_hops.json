@@ -119,7 +119,8 @@
 		        "channel_point": "99dc56859c6a082d15ba1a7f6cb6be3fea62e1746e2cb8497b1189155c21a233:0", 
 		        "flags": 0, 
 		        "expiry": 1,
-		        "min_htlc": 1, 
+		        "min_htlc": 1,
+            		"max_htlc": 100000000,
 		        "fee_base_msat": 10, 
 		        "fee_rate": 0.001, 
 		        "capacity": 100000
@@ -131,7 +132,8 @@
 		        "channel_point": "79dc56859c6a082d15ba1a7f6cb6be3fea62e1746e2cb8497b1189155c21a233:0", 
 		        "flags": 0, 
 		        "expiry": 1,
-		        "min_htlc": 1, 
+		        "min_htlc": 1,
+            		"max_htlc": 100000000,
 		        "fee_base_msat": 10, 
 		        "fee_rate": 0.001, 
 		        "capacity": 100000
@@ -143,7 +145,8 @@
 		        "channel_point": "69dc56859c6a082d15ba1a7f6cb6be3fea62e1746e2cb8497b1189155c21a233:0", 
 		        "flags": 0, 
 		        "expiry": 1,
-		        "min_htlc": 1, 
+		        "min_htlc": 1,
+            		"max_htlc": 100000000,
 		        "fee_base_msat": 10, 
 		        "fee_rate": 0.001, 
 		        "capacity": 100000
@@ -155,7 +158,8 @@
 		        "channel_point": "59dc56859c6a082d15ba1a7f6cb6be3fea62e1746e2cb8497b1189155c21a233:0", 
 		        "flags": 0, 
 		        "expiry": 1,
-		        "min_htlc": 1, 
+		        "min_htlc": 1,
+			"max_htlc": 100000000,
 		        "fee_base_msat": 10, 
 		        "fee_rate": 0.001, 
 		        "capacity": 100000
@@ -167,7 +171,8 @@
 		        "channel_point": "49dc56859c6a082d15ba1a7f6cb6be3fea62e1746e2cb8497b1189155c21a233:0", 
 		        "flags": 0, 
 		        "expiry": 1,
-		        "min_htlc": 1, 
+		        "min_htlc": 1,
+            		"max_htlc": 100000000,
 		        "fee_base_msat": 10, 
 		        "fee_rate": 0.001, 
 		        "capacity": 100000
@@ -179,7 +184,8 @@
 		        "channel_point": "39dc56859c6a082d15ba1a7f6cb6be3fea62e1746e2cb8497b1189155c21a233:0", 
 		        "flags": 0, 
 		        "expiry": 1,
-		        "min_htlc": 1, 
+		        "min_htlc": 1,
+            		"max_htlc": 100000000,
 		        "fee_base_msat": 10, 
 		        "fee_rate": 0.001, 
 		        "capacity": 100000
@@ -191,7 +197,8 @@
 		        "channel_point": "29dc56859c6a082d15ba1a7f6cb6be3fea62e1746e2cb8497b1189155c21a233:0", 
 		        "flags": 0, 
 		        "expiry": 1,
-		        "min_htlc": 1, 
+		        "min_htlc": 1,
+            		"max_htlc": 100000000,
 		        "fee_base_msat": 10, 
 		        "fee_rate": 0.001, 
 		        "capacity": 100000
@@ -203,7 +210,8 @@
 		        "channel_point": "19dc56859c6a082d15ba1a7f6cb6be3fea62e1746e2cb8497b1189155c21a233:0", 
 		        "flags": 0, 
 		        "expiry": 1,
-		        "min_htlc": 1, 
+		        "min_htlc": 1,
+            		"max_htlc": 100000000,
 		        "fee_base_msat": 10, 
 		        "fee_rate": 0.001, 
 		        "capacity": 100000
@@ -213,9 +221,10 @@
 		        "node_2": "02727bfd298aa055a6419404931dfc1ccb4f0eb7c9660a7df346b93d0025df3ba1",
 		        "channel_id": 12342, 
 		        "channel_point": "88dc56859c6a082d15ba1a7f6cb6be3fea62e1746e2cb8497b1189155c21a233:0", 
-		        "flags": 0, 
+		        "flags": 0,
 		        "expiry": 1,
-		        "min_htlc": 1, 
+		        "min_htlc": 1,
+            		"max_htlc": 100000000,
 		        "fee_base_msat": 10, 
 		        "fee_rate": 0.001, 
 		        "capacity": 100000
@@ -227,7 +236,8 @@
 		        "channel_point": "87dc56859c6a082d15ba1a7f6cb6be3fea62e1746e2cb8497b1189155c21a233:0", 
 		        "flags": 0, 
 		        "expiry": 1,
-		        "min_htlc": 1, 
+		        "min_htlc": 1,
+            		"max_htlc": 100000000,
 		        "fee_base_msat": 10, 
 		        "fee_rate": 0.001, 
 		        "capacity": 100000
@@ -239,7 +249,8 @@
 		        "channel_point": "86dc56859c6a082d15ba1a7f6cb6be3fea62e1746e2cb8497b1189155c21a233:0", 
 		        "flags": 0, 
 		        "expiry": 1,
-		        "min_htlc": 1, 
+		        "min_htlc": 1,
+            		"max_htlc": 100000000,
 		        "fee_base_msat": 10, 
 		        "fee_rate": 0.001, 
 		        "capacity": 100000
@@ -251,7 +262,8 @@
 		        "channel_point": "85dc56859c6a082d15ba1a7f6cb6be3fea62e1746e2cb8497b1189155c21a233:0", 
 		        "flags": 0, 
 		        "expiry": 1,
-		        "min_htlc": 1, 
+		        "min_htlc": 1,
+            		"max_htlc": 100000000,
 		        "fee_base_msat": 10, 
 		        "fee_rate": 0.001, 
 		        "capacity": 100000
@@ -263,7 +275,8 @@
 		        "channel_point": "84dc56859c6a082d15ba1a7f6cb6be3fea62e1746e2cb8497b1189155c21a233:0", 
 		        "flags": 0, 
 		        "expiry": 1,
-		        "min_htlc": 1, 
+		        "min_htlc": 1,
+            		"max_htlc": 100000000,
 		        "fee_base_msat": 10, 
 		        "fee_rate": 0.001, 
 		        "capacity": 100000
@@ -275,7 +288,8 @@
 		        "channel_point": "83dc56859c6a082d15ba1a7f6cb6be3fea62e1746e2cb8497b1189155c21a233:0", 
 		        "flags": 0, 
 		        "expiry": 1,
-		        "min_htlc": 1, 
+		        "min_htlc": 1,
+            		"max_htlc": 100000000,
 		        "fee_base_msat": 10, 
 		        "fee_rate": 0.001, 
 		        "capacity": 100000
@@ -287,7 +301,8 @@
 		        "channel_point": "82dc56859c6a082d15ba1a7f6cb6be3fea62e1746e2cb8497b1189155c21a233:0", 
 		        "flags": 0, 
 		        "expiry": 1,
-		        "min_htlc": 1, 
+		        "min_htlc": 1,
+            		"max_htlc": 100000000,
 		        "fee_base_msat": 10, 
 		        "fee_rate": 0.001, 
 		        "capacity": 100000
@@ -299,7 +314,8 @@
 		        "channel_point": "81dc56859c6a082d15ba1a7f6cb6be3fea62e1746e2cb8497b1189155c21a233:0", 
 		        "flags": 0, 
 		        "expiry": 1,
-		        "min_htlc": 1, 
+		        "min_htlc": 1,
+            		"max_htlc": 100000000,
 		        "fee_base_msat": 10, 
 		        "fee_rate": 0.001, 
 		        "capacity": 100000
@@ -311,7 +327,8 @@
 		        "channel_point": "80dc56859c6a082d15ba1a7f6cb6be3fea62e1746e2cb8497b1189155c21a233:0", 
 		        "flags": 0, 
 		        "expiry": 1,
-		        "min_htlc": 1, 
+		        "min_htlc": 1,
+            		"max_htlc": 100000000,
 		        "fee_base_msat": 10, 
 		        "fee_rate": 0.001, 
 		        "capacity": 100000
@@ -323,7 +340,8 @@
 		        "channel_point": "89ec56859c6a082d15ba1a7f6cb6be3fea62e1746e2cb8497b1189155c21a233:0", 
 		        "flags": 0, 
 		        "expiry": 1,
-		        "min_htlc": 1, 
+		        "min_htlc": 1,
+            		"max_htlc": 100000000,
 		        "fee_base_msat": 10, 
 		        "fee_rate": 0.001, 
 		        "capacity": 100000
@@ -335,7 +353,8 @@
 		        "channel_point": "89fc56859c6a082d15ba1a7f6cb6be3fea62e1746e2cb8497b1189155c21a233:0", 
 		        "flags": 0, 
 		        "expiry": 1,
-		        "min_htlc": 1, 
+		        "min_htlc": 1,
+            		"max_htlc": 100000000,
 		        "fee_base_msat": 10, 
 		        "fee_rate": 0.001, 
 		        "capacity": 100000
@@ -347,7 +366,8 @@
 		        "channel_point": "89cc56859c6a082d15ba1a7f6cb6be3fea62e1746e2cb8497b1189155c21a233:0", 
 		        "flags": 0, 
 		        "expiry": 1,
-		        "min_htlc": 1, 
+		        "min_htlc": 1,
+            		"max_htlc": 100000000,
 		        "fee_base_msat": 10, 
 		        "fee_rate": 0.001, 
 		        "capacity": 100000
@@ -359,7 +379,8 @@
 		        "channel_point": "89bc56859c6a082d15ba1a7f6cb6be3fea62e1746e2cb8497b1189155c21a233:0", 
 		        "flags": 0, 
 		        "expiry": 1,
-		        "min_htlc": 1, 
+		        "min_htlc": 1,
+            		"max_htlc": 100000000,
 		        "fee_base_msat": 10, 
 		        "fee_rate": 0.001, 
 		        "capacity": 100000

@@ -3301,6 +3301,7 @@ func marshalDbEdge(edgeInfo *channeldb.ChannelEdgeInfo,
 		edge.Node1Policy = &lnrpc.RoutingPolicy{
 			TimeLockDelta:    uint32(c1.TimeLockDelta),
 			MinHtlc:          int64(c1.MinHTLC),
+			MaxHtlc:          uint64(c1.MaxHTLC),
 			FeeBaseMsat:      int64(c1.FeeBaseMSat),
 			FeeRateMilliMsat: int64(c1.FeeProportionalMillionths),
 			Disabled:         c1.Flags&lnwire.ChanUpdateDisabled != 0,
@@ -3311,6 +3312,7 @@ func marshalDbEdge(edgeInfo *channeldb.ChannelEdgeInfo,
 		edge.Node2Policy = &lnrpc.RoutingPolicy{
 			TimeLockDelta:    uint32(c2.TimeLockDelta),
 			MinHtlc:          int64(c2.MinHTLC),
+			MaxHtlc:          uint64(c2.MaxHTLC),
 			FeeBaseMsat:      int64(c2.FeeBaseMSat),
 			FeeRateMilliMsat: int64(c2.FeeProportionalMillionths),
 			Disabled:         c2.Flags&lnwire.ChanUpdateDisabled != 0,
@@ -3850,6 +3852,7 @@ func marshallTopologyChange(topChange *routing.TopologyChange) *lnrpc.GraphTopol
 			RoutingPolicy: &lnrpc.RoutingPolicy{
 				TimeLockDelta:    uint32(channelUpdate.TimeLockDelta),
 				MinHtlc:          int64(channelUpdate.MinHTLC),
+				MaxHtlc:          uint64(channelUpdate.MaxHTLC),
 				FeeBaseMsat:      int64(channelUpdate.BaseFee),
 				FeeRateMilliMsat: int64(channelUpdate.FeeRate),
 				Disabled:         channelUpdate.Disabled,
@@ -4295,6 +4298,7 @@ func (r *rpcServer) UpdateChannelPolicy(ctx context.Context,
 	chanPolicy := routing.ChannelPolicy{
 		FeeSchema:     feeSchema,
 		TimeLockDelta: req.TimeLockDelta,
+		MaxHTLC:       lnwire.MilliSatoshi(req.MaxHtlcMsat),
 	}
 
 	rpcsLog.Debugf("[updatechanpolicy] updating channel policy base_fee=%v, "+
@@ -4321,6 +4325,7 @@ func (r *rpcServer) UpdateChannelPolicy(ctx context.Context,
 		BaseFee:       baseFeeMsat,
 		FeeRate:       lnwire.MilliSatoshi(feeRateFixed),
 		TimeLockDelta: req.TimeLockDelta,
+		MaxHTLC:       lnwire.MilliSatoshi(req.MaxHtlcMsat),
 	}
 	err = r.server.htlcSwitch.UpdateForwardingPolicies(p, targetChans...)
 	if err != nil {

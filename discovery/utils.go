@@ -67,14 +67,23 @@ func CreateChanAnnouncement(chanProof *channeldb.ChannelAuthProof,
 	// edge in a direction, we don't create an advertisement if the edge is
 	// nil.
 	var edge1Ann, edge2Ann *lnwire.ChannelUpdate
+
+	// Part of commit: ensure max htlc / msg flags are properly shared
+	// when syncing channelupdates with a remote peer
 	if e1 != nil {
+		msgFlags := 1
+		if e1.MaxHTLC == 0 {
+			msgFlags = 0
+		}
 		edge1Ann = &lnwire.ChannelUpdate{
 			ChainHash:       chanInfo.ChainHash,
 			ShortChannelID:  chanID,
 			Timestamp:       uint32(e1.LastUpdate.Unix()),
 			ChannelFlags:    e1.Flags,
+			MsgFlags:        lnwire.ChanUpdateFlag(msgFlags),
 			TimeLockDelta:   e1.TimeLockDelta,
 			HtlcMinimumMsat: e1.MinHTLC,
+			HtlcMaximumMsat: e1.MaxHTLC,
 			BaseFee:         uint32(e1.FeeBaseMSat),
 			FeeRate:         uint32(e1.FeeProportionalMillionths),
 			ExtraOpaqueData: e1.ExtraOpaqueData,
@@ -84,14 +93,22 @@ func CreateChanAnnouncement(chanProof *channeldb.ChannelAuthProof,
 			return nil, nil, nil, err
 		}
 	}
+	// Part of commit: ensure max htlc / msg flags are properly shared
+	// when syncing channelupdates with a remote peer
 	if e2 != nil {
+		msgFlags := 1
+		if e2.MaxHTLC == 0 {
+			msgFlags = 0
+		}
 		edge2Ann = &lnwire.ChannelUpdate{
 			ChainHash:       chanInfo.ChainHash,
 			ShortChannelID:  chanID,
 			Timestamp:       uint32(e2.LastUpdate.Unix()),
 			ChannelFlags:    e2.Flags,
+			MsgFlags:        lnwire.ChanUpdateFlag(msgFlags),
 			TimeLockDelta:   e2.TimeLockDelta,
 			HtlcMinimumMsat: e2.MinHTLC,
+			HtlcMaximumMsat: e2.MaxHTLC,
 			BaseFee:         uint32(e2.FeeBaseMSat),
 			FeeRate:         uint32(e2.FeeProportionalMillionths),
 			ExtraOpaqueData: e2.ExtraOpaqueData,

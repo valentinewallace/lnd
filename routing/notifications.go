@@ -266,6 +266,9 @@ type ChannelEdgeUpdate struct {
 	// MinHTLC is the minimum HTLC amount that this channel will forward.
 	MinHTLC lnwire.MilliSatoshi
 
+	// MaxHTLC is the maximum HTLC amount that this channel will forward.
+	MaxHTLC lnwire.MilliSatoshi
+
 	// BaseFee is the base fee that will charged for all HTLC's forwarded
 	// across the this channel direction.
 	BaseFee lnwire.MilliSatoshi
@@ -353,12 +356,16 @@ func addToTopologyChange(graph *channeldb.ChannelGraph, update *TopologyChange,
 			return err
 		}
 
+		// All changes to this file:
+		// notify subscribers to topology notifications of changes to
+		// an edge's max htlc
 		edgeUpdate := &ChannelEdgeUpdate{
 			ChanID:          m.ChannelID,
 			ChanPoint:       edgeInfo.ChannelPoint,
 			TimeLockDelta:   m.TimeLockDelta,
 			Capacity:        edgeInfo.Capacity,
 			MinHTLC:         m.MinHTLC,
+			MaxHTLC:         m.MaxHTLC,
 			BaseFee:         m.FeeBaseMSat,
 			FeeRate:         m.FeeProportionalMillionths,
 			AdvertisingNode: aNode,

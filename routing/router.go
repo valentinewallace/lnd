@@ -140,6 +140,10 @@ type ChannelPolicy struct {
 	// TimeLockDelta is the required HTLC timelock delta to be used
 	// when forwarding payments.
 	TimeLockDelta uint32
+
+	// MaxHTLC is the maximum HTLC size including fees we are allowed to forward
+	// over this channel.
+	MaxHTLC lnwire.MilliSatoshi
 }
 
 // Config defines the configuration for the ChannelRouter. ALL elements within
@@ -2057,17 +2061,27 @@ func (r *ChannelRouter) applyChannelUpdate(msg *lnwire.ChannelUpdate,
 		return nil
 	}
 
-	if err := ValidateChannelUpdateAnn(pubKey, msg); err != nil {
+	ch, _, _, err := r.GetChannelByID(msg.ShortChannelID)
+	if err != nil {
 		return err
 	}
 
-	err := r.UpdateEdge(&channeldb.ChannelEdgePolicy{
+	if err := ValidateChannelUpdateAnn(pubKey, ch.Capacity, msg); err != nil {
+		return err
+	}
+
+	if msg.MsgFlags == 0 {
+		msg.HtlcMaximumMsat = lnwire.NewMSatFromSatoshis(ch.Capacity)
+	}
+
+	err = r.UpdateEdge(&channeldb.ChannelEdgePolicy{
 		SigBytes:                  msg.Signature.ToSignatureBytes(),
 		ChannelID:                 msg.ShortChannelID.ToUint64(),
 		LastUpdate:                time.Unix(int64(msg.Timestamp), 0),
 		Flags:                     msg.ChannelFlags,
 		TimeLockDelta:             msg.TimeLockDelta,
 		MinHTLC:                   msg.HtlcMinimumMsat,
+		MaxHTLC:                   msg.HtlcMaximumMsat,
 		FeeBaseMSat:               lnwire.MilliSatoshi(msg.BaseFee),
 		FeeProportionalMillionths: lnwire.MilliSatoshi(msg.FeeRate),
 	})

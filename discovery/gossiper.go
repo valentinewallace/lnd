@@ -1430,6 +1430,10 @@ func (d *AuthenticatedGossiper) processChanPolicyUpdate(
 		)
 		edge.TimeLockDelta = uint16(policyUpdate.newSchema.TimeLockDelta)
 
+		// ensure that all channeledgepolicy's in the database get updated with
+		// the new max htlc value when the user sets it in rpcserver.UpdateChanPolicy
+		edge.MaxHTLC = policyUpdate.newSchema.MaxHTLC
+
 		edgesToUpdate = append(edgesToUpdate, edgeWithInfo{
 			info: info,
 			edge: edge,
@@ -1994,10 +1998,14 @@ func (d *AuthenticatedGossiper) processNetworkAnnouncement(
 			pubKey, _ = chanInfo.NodeKey2()
 		}
 
-		// Validate the channel announcement with the expected public
-		// key, In the case of an invalid channel , we'll return an
-		// error to the caller and exit early.
-		if err := routing.ValidateChannelUpdateAnn(pubKey, msg); err != nil {
+		// Ensure updates to remote max htlc policies are properly validated
+		// and written to disk.
+
+		// Validate the channel announcement with the expected public key and
+		// channel capacity. In the case of an invalid channel update, we'll
+		// return an error to the caller and exit early.
+		err = routing.ValidateChannelUpdateAnn(pubKey, chanInfo.Capacity, msg)
+		if err != nil {
 			rErr := fmt.Errorf("unable to validate channel "+
 				"update announcement for short_chan_id=%v: %v",
 				spew.Sdump(msg.ShortChannelID), err)
@@ -2007,6 +2015,11 @@ func (d *AuthenticatedGossiper) processNetworkAnnouncement(
 			return nil
 		}
 
+		// Set a default value for the max allowed HTLC if one is not set.
+		if msg.MsgFlags == 0 {
+			msg.HtlcMaximumMsat = lnwire.NewMSatFromSatoshis(chanInfo.Capacity)
+		}
+
 		update := &channeldb.ChannelEdgePolicy{
 			SigBytes:                  msg.Signature.ToSignatureBytes(),
 			ChannelID:                 shortChanID,
@@ -2014,6 +2027,7 @@ func (d *AuthenticatedGossiper) processNetworkAnnouncement(
 			Flags:                     msg.ChannelFlags,
 			TimeLockDelta:             msg.TimeLockDelta,
 			MinHTLC:                   msg.HtlcMinimumMsat,
+			MaxHTLC:                   msg.HtlcMaximumMsat,
 			FeeBaseMSat:               lnwire.MilliSatoshi(msg.BaseFee),
 			FeeProportionalMillionths: lnwire.MilliSatoshi(msg.FeeRate),
 			ExtraOpaqueData:           msg.ExtraOpaqueData,
@@ -2514,14 +2528,25 @@ func (d *AuthenticatedGossiper) updateChannel(info *channeldb.ChannelEdgeInfo,
 	if timestamp <= edge.LastUpdate.Unix() {
 		timestamp = edge.LastUpdate.Unix() + 1
 	}
+
+	// ensure that all channeledgepolicy's in the database get updated with
+	// the new max htlc value when the user sets it in rpcserver.UpdateChanPolicy
+
+	// Check whether optional fields are present.
+	msgFlags := 1
+	if edge.MaxHTLC == 0 {
+		msgFlags = 0
+	}
 	edge.LastUpdate = time.Unix(timestamp, 0)
 	chanUpdate := &lnwire.ChannelUpdate{
 		ChainHash:       info.ChainHash,
 		ShortChannelID:  lnwire.NewShortChanIDFromInt(edge.ChannelID),
 		Timestamp:       uint32(timestamp),
 		ChannelFlags:    edge.Flags,
+		MsgFlags:        lnwire.ChanUpdateFlag(msgFlags),
 		TimeLockDelta:   edge.TimeLockDelta,
 		HtlcMinimumMsat: edge.MinHTLC,
+		HtlcMaximumMsat: edge.MaxHTLC,
 		BaseFee:         uint32(edge.FeeBaseMSat),
 		FeeRate:         uint32(edge.FeeProportionalMillionths),
 		ExtraOpaqueData: edge.ExtraOpaqueData,
@@ -2548,7 +2573,7 @@ func (d *AuthenticatedGossiper) updateChannel(info *channeldb.ChannelEdgeInfo,
 
 	// To ensure that our signature is valid, we'll verify it ourself
 	// before committing it to the slice returned.
-	err = routing.ValidateChannelUpdateAnn(d.selfKey, chanUpdate)
+	err = routing.ValidateChannelUpdateAnn(d.selfKey, info.Capacity, chanUpdate)
 	if err != nil {
 		return nil, nil, fmt.Errorf("generated invalid channel "+
 			"update sig: %v", err)
