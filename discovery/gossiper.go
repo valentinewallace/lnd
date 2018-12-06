@@ -675,7 +675,7 @@ func (d *deDupedAnnouncements) addMsg(message networkMsg) {
 		sender := routing.NewVertex(message.source)
 		deDupKey := channelUpdateID{
 			msg.ShortChannelID,
-			msg.Flags,
+			msg.ChannelFlags,
 		}
 
 		oldTimestamp := uint32(0)
@@ -1913,7 +1913,7 @@ func (d *AuthenticatedGossiper) processNetworkAnnouncement(
 		// announcement for this edge.
 		timestamp := time.Unix(int64(msg.Timestamp), 0)
 		if d.cfg.Router.IsStaleEdgePolicy(
-			msg.ShortChannelID, timestamp, msg.Flags,
+			msg.ShortChannelID, timestamp, msg.ChannelFlags,
 		) {
 
 			nMsg.err <- nil
@@ -1988,9 +1988,9 @@ func (d *AuthenticatedGossiper) processNetworkAnnouncement(
 		// edge is being updated.
 		var pubKey *btcec.PublicKey
 		switch {
-		case msg.Flags&lnwire.ChanUpdateDirection == 0:
+		case msg.ChannelFlags&lnwire.ChanUpdateDirection == 0:
 			pubKey, _ = chanInfo.NodeKey1()
-		case msg.Flags&lnwire.ChanUpdateDirection == 1:
+		case msg.ChannelFlags&lnwire.ChanUpdateDirection == 1:
 			pubKey, _ = chanInfo.NodeKey2()
 		}
 
@@ -2011,7 +2011,7 @@ func (d *AuthenticatedGossiper) processNetworkAnnouncement(
 			SigBytes:                  msg.Signature.ToSignatureBytes(),
 			ChannelID:                 shortChanID,
 			LastUpdate:                timestamp,
-			Flags:                     msg.Flags,
+			Flags:                     msg.ChannelFlags,
 			TimeLockDelta:             msg.TimeLockDelta,
 			MinHTLC:                   msg.HtlcMinimumMsat,
 			FeeBaseMSat:               lnwire.MilliSatoshi(msg.BaseFee),
@@ -2043,9 +2043,9 @@ func (d *AuthenticatedGossiper) processNetworkAnnouncement(
 			// Get our peer's public key.
 			var remotePub *btcec.PublicKey
 			switch {
-			case msg.Flags&lnwire.ChanUpdateDirection == 0:
+			case msg.ChannelFlags&lnwire.ChanUpdateDirection == 0:
 				remotePub, _ = chanInfo.NodeKey2()
-			case msg.Flags&lnwire.ChanUpdateDirection == 1:
+			case msg.ChannelFlags&lnwire.ChanUpdateDirection == 1:
 				remotePub, _ = chanInfo.NodeKey1()
 			}
 
@@ -2519,7 +2519,7 @@ func (d *AuthenticatedGossiper) updateChannel(info *channeldb.ChannelEdgeInfo,
 		ChainHash:       info.ChainHash,
 		ShortChannelID:  lnwire.NewShortChanIDFromInt(edge.ChannelID),
 		Timestamp:       uint32(timestamp),
-		Flags:           edge.Flags,
+		ChannelFlags:    edge.Flags,
 		TimeLockDelta:   edge.TimeLockDelta,
 		HtlcMinimumMsat: edge.MinHTLC,
 		BaseFee:         uint32(edge.FeeBaseMSat),

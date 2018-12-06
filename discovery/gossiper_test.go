@@ -441,8 +441,8 @@ func createUpdateAnnouncement(blockHeight uint32, flags lnwire.ChanUpdateFlag,
 		},
 		Timestamp:       timestamp,
 		TimeLockDelta:   uint16(prand.Int63()),
-		Flags:           flags,
 		HtlcMinimumMsat: lnwire.MilliSatoshi(prand.Int63()),
+		ChannelFlags:    flags,
 		FeeRate:         uint32(prand.Int31()),
 		BaseFee:         uint32(prand.Int31()),
 	}
@@ -2017,7 +2017,7 @@ func TestDeDuplicatedAnnouncements(t *testing.T) {
 	assertChannelUpdate := func(channelUpdate *lnwire.ChannelUpdate) {
 		channelKey := channelUpdateID{
 			ua3.ShortChannelID,
-			ua3.Flags,
+			ua3.ChannelFlags,
 		}
 
 		mws, ok := announcements.channelUpdates[channelKey]

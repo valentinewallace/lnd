@@ -546,7 +546,7 @@ func TestSendPaymentErrorRepeatedFeeInsufficient(t *testing.T) {
 	errChanUpdate := lnwire.ChannelUpdate{
 		ShortChannelID:  lnwire.NewShortChanIDFromInt(chanID),
 		Timestamp:       uint32(edgeUpateToFail.LastUpdate.Unix()),
-		Flags:           edgeUpateToFail.Flags,
+		ChannelFlags:    edgeUpateToFail.Flags,
 		TimeLockDelta:   edgeUpateToFail.TimeLockDelta,
 		HtlcMinimumMsat: edgeUpateToFail.MinHTLC,
 		BaseFee:         uint32(edgeUpateToFail.FeeBaseMSat),
@@ -652,7 +652,7 @@ func TestSendPaymentErrorNonFinalTimeLockErrors(t *testing.T) {
 	errChanUpdate := lnwire.ChannelUpdate{
 		ShortChannelID:  lnwire.NewShortChanIDFromInt(chanID),
 		Timestamp:       uint32(edgeUpateToFail.LastUpdate.Unix()),
-		Flags:           edgeUpateToFail.Flags,
+		ChannelFlags:    edgeUpateToFail.Flags,
 		TimeLockDelta:   edgeUpateToFail.TimeLockDelta,
 		HtlcMinimumMsat: edgeUpateToFail.MinHTLC,
 		BaseFee:         uint32(edgeUpateToFail.FeeBaseMSat),
