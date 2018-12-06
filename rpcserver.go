@@ -4168,16 +4168,68 @@ func (r *rpcServer) FeeReport(ctx context.Context,
 // 0.000001, or 0.0001%.
 const minFeeRate = 1e-6
 
+// checkMaxHtlc errors if the user tries to update their channel policy with
+// a max HTLC value that is too high or too low for a given list of channels.
+func checkMaxHtlc(maxHtlc uint64, channels []*channeldb.OpenChannel) error {
+	var (
+		minSupportedHtlc lnwire.MilliSatoshi
+		maxSupportedHtlc = lnwire.MilliSatoshi(math.MaxUint64)
+	)
+
+	for _, ch := range channels {
+		minHtlcMsat := ch.LocalChanCfg.MinHTLC
+		if minSupportedHtlc < minHtlcMsat {
+			minSupportedHtlc = minHtlcMsat
+		}
+
+		// The max HTLC policy field must be less than or equal to the channel
+		// capacity AND less than or equal to the max in-flight HTLC value.
+		// Since the latter is always less than or equal to the former, only
+		// check the max in-flight value.
+		maxPendingMsats := ch.LocalChanCfg.ChannelConstraints.MaxPendingAmount
+		if maxPendingMsats < maxSupportedHtlc {
+			maxSupportedHtlc = maxPendingMsats
+		}
+	}
+
+	if maxSupportedHtlc < lnwire.MilliSatoshi(maxHtlc) {
+		return fmt.Errorf("max htlc size of %v msat is too "+
+			"large, max supported is %v", maxHtlc, maxSupportedHtlc)
+	}
+
+	if minSupportedHtlc > lnwire.MilliSatoshi(maxHtlc) {
+		return fmt.Errorf("max htlc size of %v msat is too small, "+
+			"min supported is %v", maxHtlc, minSupportedHtlc)
+	}
+
+	return nil
+}
+
 // UpdateChannelPolicy allows the caller to update the channel forwarding policy
 // for all channels globally, or a particular channel.
 func (r *rpcServer) UpdateChannelPolicy(ctx context.Context,
 	req *lnrpc.PolicyUpdateRequest) (*lnrpc.PolicyUpdateResponse, error) {
 
 	var targetChans []wire.OutPoint
+	var targetDbChans []*channeldb.OpenChannel
 	switch scope := req.Scope.(type) {
-	// If the request is targeting all active channels, then we don't need
-	// target any channels by their channel point.
+	// If the request is targeting all active channels, then we need to retrieve
+	// them to check that the request's max HTLC value is within range.
 	case *lnrpc.PolicyUpdateRequest_Global:
+		openChannels, err := r.server.chanDB.FetchAllOpenChannels()
+		if err != nil {
+			return nil, err
+		}
+
+		pendingChannels, err := r.server.chanDB.FetchPendingChannels()
+		if err != nil {
+			return nil, err
+		}
+
+		targetDbChans = append(openChannels, pendingChannels...)
+		if err := checkMaxHtlc(req.MaxHtlcMsat, targetDbChans); err != nil {
+			return nil, err
+		}
 
 	// Otherwise, we're targeting an individual channel by its channel
 	// point.
@@ -4190,10 +4242,20 @@ func (r *rpcServer) UpdateChannelPolicy(ctx context.Context,
 		if err != nil {
 			return nil, err
 		}
-		targetChans = append(targetChans, wire.OutPoint{
+
+		outPoint := wire.OutPoint{
 			Hash:  *txid,
 			Index: scope.ChanPoint.OutputIndex,
-		})
+		}
+		targetChans = append(targetChans, outPoint)
+
+		targetChan, err := r.fetchOpenDbChannel(outPoint)
+		if err != nil {
+			return nil, err
+		}
+
+		targetDbChans = append(targetDbChans, targetChan)
+
 	default:
 		return nil, fmt.Errorf("unknown scope: %v", scope)
 	}
@@ -4210,6 +4272,12 @@ func (r *rpcServer) UpdateChannelPolicy(ctx context.Context,
 		return nil, fmt.Errorf("time lock delta of %v is too small, "+
 			"minimum supported is %v", req.TimeLockDelta,
 			minTimeLockDelta)
+	}
+
+	// Ensure that the passed max HTLC value is within the allowed range for
+	// the target channels.
+	if err := checkMaxHtlc(req.MaxHtlcMsat, targetDbChans); err != nil {
+		return nil, err
 	}
 
 	// We'll also need to convert the floating point fee rate we accept

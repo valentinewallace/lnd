@@ -883,6 +883,15 @@ type expectedChanUpdate struct {
 	chanPoint       *lnrpc.ChannelPoint
 }
 
+// calculateMaxHtlc re-implements the RequiredRemoteChannelReserve of the
+// funding manager's config, which corresponds to the maximum MaxHTLC value we
+// allow users to set when updating a channel policy.
+func calculateMaxHtlc(chanCap btcutil.Amount) uint64 {
+	reserve := lnwire.NewMSatFromSatoshis(chanCap / 100)
+	max := lnwire.NewMSatFromSatoshis(chanCap) - reserve
+	return uint64(max)
+}
+
 // waitForChannelUpdate waits for a node to receive the expected channel
 // updates.
 func waitForChannelUpdate(t *harnessTest, subscription graphSubscription,
@@ -1319,6 +1328,7 @@ func testUpdateChannelPolicy(net *lntest.NetworkHarness, t *harnessTest) {
 	baseFee := int64(1500)
 	feeRate := int64(12)
 	timeLockDelta := uint32(66)
+	maxHtlc := uint64(500000)
 
 	expectedPolicy = &lnrpc.RoutingPolicy{
 		FeeBaseMsat:      baseFee,
@@ -1331,6 +1341,7 @@ func testUpdateChannelPolicy(net *lntest.NetworkHarness, t *harnessTest) {
 		BaseFeeMsat:   baseFee,
 		FeeRate:       float64(feeRate),
 		TimeLockDelta: timeLockDelta,
+		MaxHtlcMsat:   maxHtlc,
 		Scope: &lnrpc.PolicyUpdateRequest_ChanPoint{
 			ChanPoint: chanPoint,
 		},
@@ -1382,6 +1393,22 @@ func testUpdateChannelPolicy(net *lntest.NetworkHarness, t *harnessTest) {
 		t.Fatalf("unable to send payment: %v", err)
 	}
 
+	// Ensure that we can't update a channel's max HTLC with a value above the
+	// max in-flight msats set by the peer.
+	req.MaxHtlcMsat = calculateMaxHtlc(maxBtcFundingAmount) + 1
+	_, err = net.Bob.UpdateChannelPolicy(ctxb, req)
+	if err == nil || !strings.Contains(err.Error(), "is too large") {
+		t.Fatalf("expected policy update to fail, instead got %v", err)
+	}
+
+	// Ensure that we can't update a channel's max HTLC with a value below the
+	// min HTLC.
+	req.MaxHtlcMsat = defaultMinHtlc - 1
+	_, err = net.Bob.UpdateChannelPolicy(ctxb, req)
+	if err == nil || !strings.Contains(err.Error(), "is too small") {
+		t.Fatalf("expected policy update to fail, instead got %v", err)
+	}
+
 	// We'll now open a channel from Alice directly to Carol.
 	if err := net.ConnectNodes(ctxb, net.Alice, carol); err != nil {
 		t.Fatalf("unable to connect dave to alice: %v", err)
@@ -1411,15 +1438,18 @@ func testUpdateChannelPolicy(net *lntest.NetworkHarness, t *harnessTest) {
 	baseFee = int64(800)
 	feeRate = int64(123)
 	timeLockDelta = uint32(22)
+	maxHtlc = maxHtlc * 2
 
 	expectedPolicy.FeeBaseMsat = baseFee
 	expectedPolicy.FeeRateMilliMsat = testFeeBase * feeRate
 	expectedPolicy.TimeLockDelta = timeLockDelta
+	expectedPolicy.MaxHtlc = maxHtlc
 
 	req = &lnrpc.PolicyUpdateRequest{
 		BaseFeeMsat:   baseFee,
 		FeeRate:       float64(feeRate),
 		TimeLockDelta: timeLockDelta,
+		MaxHtlcMsat:   maxHtlc,
 	}
 	req.Scope = &lnrpc.PolicyUpdateRequest_Global{}
 
@@ -3440,6 +3470,7 @@ func updateChannelPolicy(t *harnessTest, node *lntest.HarnessNode,
 		Scope: &lnrpc.PolicyUpdateRequest_ChanPoint{
 			ChanPoint: chanPoint,
 		},
+		MaxHtlcMsat: maxHtlc,
 	}
 
 	ctxt, _ := context.WithTimeout(ctxb, timeout)
@@ -11964,6 +11995,7 @@ func testRouteFeeCutoff(net *lntest.NetworkHarness, t *harnessTest) {
 	baseFee := int64(10000)
 	feeRate := int64(5)
 	timeLockDelta := uint32(144)
+	maxHtlc := calculateMaxHtlc(chanAmt)
 
 	expectedPolicy := &lnrpc.RoutingPolicy{
 		FeeBaseMsat:      baseFee,
@@ -11976,6 +12008,7 @@ func testRouteFeeCutoff(net *lntest.NetworkHarness, t *harnessTest) {
 		BaseFeeMsat:   baseFee,
 		FeeRate:       float64(feeRate),
 		TimeLockDelta: timeLockDelta,
+		MaxHtlcMsat:   maxHtlc,
 		Scope: &lnrpc.PolicyUpdateRequest_ChanPoint{
 			ChanPoint: chanPointCarolDave,
 		},
