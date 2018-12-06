@@ -2477,11 +2477,12 @@ func (f *fundingManager) newChanAnnouncement(localPubKey, remotePubKey,
 	// We announce the channel with the default values. Some of
 	// these values can later be changed by crafting a new ChannelUpdate.
 	chanUpdateAnn := &lnwire.ChannelUpdate{
-		ShortChannelID: shortChanID,
-		ChainHash:      chainHash,
-		Timestamp:      uint32(time.Now().Unix()),
-		Flags:          chanFlags,
+		ShortChannelID:  shortChanID,
+		ChainHash:       chainHash,
+		Timestamp:       uint32(time.Now().Unix()),
+		ChannelFlags:    chanFlags,
 		TimeLockDelta:  uint16(f.cfg.DefaultRoutingPolicy.TimeLockDelta),
+		TimeLockDelta:   uint16(f.cfg.DefaultRoutingPolicy.TimeLockDelta),
 
 		// We use the HtlcMinimumMsat that the remote party required us
 		// to use, as our ChannelUpdate will be used to carry HTLCs
