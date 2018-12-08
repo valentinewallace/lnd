@@ -604,8 +604,10 @@ func TestLightningWireProtocol(t *testing.T) {
 				ShortChannelID:  NewShortChanIDFromInt(uint64(r.Int63())),
 				Timestamp:       uint32(r.Int31()),
 				ChannelFlags:    ChanUpdateFlag(r.Int31()),
+				MsgFlags:        1,
 				TimeLockDelta:   uint16(r.Int31()),
 				HtlcMinimumMsat: MilliSatoshi(r.Int63()),
+				HtlcMaximumMsat: MilliSatoshi(r.Int63()),
 				BaseFee:         uint32(r.Int31()),
 				FeeRate:         uint32(r.Int31()),
 			}
