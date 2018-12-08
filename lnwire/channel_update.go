@@ -71,6 +71,9 @@ type ChannelUpdate struct {
 	// HtlcMinimumMsat is the minimum HTLC value which will be accepted.
 	HtlcMinimumMsat MilliSatoshi
 
+	// HtlcMaximumMsat is the maximum HTLC value which will be accepted.
+	HtlcMaximumMsat MilliSatoshi
+
 	// BaseFee is the base fee that must be used for incoming HTLC's to
 	// this particular channel. This value will be tacked onto the required
 	// for a payment independent of the size of the payment.
@@ -107,6 +110,7 @@ func (a *ChannelUpdate) Decode(r io.Reader, pver uint32) error {
 		&a.MsgFlags,
 		&a.TimeLockDelta,
 		&a.HtlcMinimumMsat,
+		&a.HtlcMaximumMsat,
 		&a.BaseFee,
 		&a.FeeRate,
 	)
@@ -143,6 +147,7 @@ func (a *ChannelUpdate) Encode(w io.Writer, pver uint32) error {
 		a.MsgFlags,
 		a.TimeLockDelta,
 		a.HtlcMinimumMsat,
+		a.HtlcMaximumMsat,
 		a.BaseFee,
 		a.FeeRate,
 		a.ExtraOpaqueData,
@@ -179,6 +184,7 @@ func (a *ChannelUpdate) DataToSign() ([]byte, error) {
 		a.MsgFlags,
 		a.TimeLockDelta,
 		a.HtlcMinimumMsat,
+		a.HtlcMaximumMsat,
 		a.BaseFee,
 		a.FeeRate,
 		a.ExtraOpaqueData,
