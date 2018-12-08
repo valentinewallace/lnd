@@ -4519,6 +4519,7 @@ func (r *rpcServer) UpdateChannelPolicy(ctx context.Context,
 	chanPolicy := routing.ChannelPolicy{
 		FeeSchema:     feeSchema,
 		TimeLockDelta: req.TimeLockDelta,
+		MaxHTLC:       lnwire.MilliSatoshi(req.MaxHtlcMsat),
 	}
 
 	rpcsLog.Debugf("[updatechanpolicy] updating channel policy base_fee=%v, "+
