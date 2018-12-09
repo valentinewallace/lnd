@@ -362,16 +362,19 @@ func TestChannelUpdateValidation(t *testing.T) {
 	t.Parallel()
 
 	// Setup a three node network.
+	chanCapSat := btcutil.Amount(100000)
 	testChannels := []*testChannel{
-		symmetricTestChannel("a", "b", 100000, &testChannelPolicy{
+		symmetricTestChannel("a", "b", chanCapSat, &testChannelPolicy{
 			Expiry:  144,
 			FeeRate: 400,
 			MinHTLC: 1,
+			MaxHTLC: lnwire.NewMSatFromSatoshis(chanCapSat),
 		}, 1),
-		symmetricTestChannel("b", "c", 100000, &testChannelPolicy{
+		symmetricTestChannel("b", "c", chanCapSat, &testChannelPolicy{
 			Expiry:  144,
 			FeeRate: 400,
 			MinHTLC: 1,
+			MaxHTLC: lnwire.NewMSatFromSatoshis(chanCapSat),
 		}, 2),
 	}
 
@@ -549,8 +552,10 @@ func TestSendPaymentErrorRepeatedFeeInsufficient(t *testing.T) {
 		ShortChannelID:  lnwire.NewShortChanIDFromInt(chanID),
 		Timestamp:       uint32(edgeUpateToFail.LastUpdate.Unix()),
 		ChannelFlags:    edgeUpateToFail.Flags,
+		MsgFlags:        1,
 		TimeLockDelta:   edgeUpateToFail.TimeLockDelta,
 		HtlcMinimumMsat: edgeUpateToFail.MinHTLC,
+		HtlcMaximumMsat: edgeUpateToFail.MaxHTLC,
 		BaseFee:         uint32(edgeUpateToFail.FeeBaseMSat),
 		FeeRate:         uint32(edgeUpateToFail.FeeProportionalMillionths),
 	}
@@ -655,8 +660,10 @@ func TestSendPaymentErrorNonFinalTimeLockErrors(t *testing.T) {
 		ShortChannelID:  lnwire.NewShortChanIDFromInt(chanID),
 		Timestamp:       uint32(edgeUpateToFail.LastUpdate.Unix()),
 		ChannelFlags:    edgeUpateToFail.Flags,
+		MsgFlags:        1,
 		TimeLockDelta:   edgeUpateToFail.TimeLockDelta,
 		HtlcMinimumMsat: edgeUpateToFail.MinHTLC,
+		HtlcMaximumMsat: edgeUpateToFail.MaxHTLC,
 		BaseFee:         uint32(edgeUpateToFail.FeeBaseMSat),
 		FeeRate:         uint32(edgeUpateToFail.FeeProportionalMillionths),
 	}
