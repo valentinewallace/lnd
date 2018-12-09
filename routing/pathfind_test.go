@@ -92,6 +92,7 @@ type testChan struct {
 	Flags        uint16 `json:"flags"`
 	Expiry       uint16 `json:"expiry"`
 	MinHTLC      int64  `json:"min_htlc"`
+	MaxHTLC      int64  `json:"max_htlc"`
 	FeeBaseMsat  int64  `json:"fee_base_msat"`
 	FeeRate      int64  `json:"fee_rate"`
 	Capacity     int64  `json:"capacity"`
@@ -277,6 +278,7 @@ func parseTestGraph(path string) (*testGraphInstance, error) {
 			LastUpdate:                testTime,
 			TimeLockDelta:             edge.Expiry,
 			MinHTLC:                   lnwire.MilliSatoshi(edge.MinHTLC),
+			MaxHTLC:                   lnwire.MilliSatoshi(edge.MaxHTLC),
 			FeeBaseMSat:               lnwire.MilliSatoshi(edge.FeeBaseMsat),
 			FeeProportionalMillionths: lnwire.MilliSatoshi(edge.FeeRate),
 		}
@@ -295,6 +297,7 @@ func parseTestGraph(path string) (*testGraphInstance, error) {
 type testChannelPolicy struct {
 	Expiry      uint16
 	MinHTLC     lnwire.MilliSatoshi
+	MaxHTLC     lnwire.MilliSatoshi
 	FeeBaseMsat lnwire.MilliSatoshi
 	FeeRate     lnwire.MilliSatoshi
 }
@@ -304,12 +307,13 @@ type testChannelEnd struct {
 	testChannelPolicy
 }
 
-func defaultTestChannelEnd(alias string) *testChannelEnd {
+func defaultTestChannelEnd(alias string, capacity btcutil.Amount) *testChannelEnd {
 	return &testChannelEnd{
 		Alias: alias,
 		testChannelPolicy: testChannelPolicy{
 			Expiry:      144,
 			MinHTLC:     lnwire.MilliSatoshi(1000),
+			MaxHTLC:     lnwire.NewMSatFromSatoshis(capacity),
 			FeeBaseMsat: lnwire.MilliSatoshi(1000),
 			FeeRate:     lnwire.MilliSatoshi(1),
 		},
@@ -494,6 +498,7 @@ func createTestGraphFromChannels(testChannels []*testChannel) (*testGraphInstanc
 			LastUpdate:                testTime,
 			TimeLockDelta:             testChannel.Node1.Expiry,
 			MinHTLC:                   testChannel.Node1.MinHTLC,
+			MaxHTLC:                   testChannel.Node1.MaxHTLC,
 			FeeBaseMSat:               testChannel.Node1.FeeBaseMsat,
 			FeeProportionalMillionths: testChannel.Node1.FeeRate,
 		}
@@ -509,6 +514,7 @@ func createTestGraphFromChannels(testChannels []*testChannel) (*testGraphInstanc
 			LastUpdate:                testTime,
 			TimeLockDelta:             testChannel.Node2.Expiry,
 			MinHTLC:                   testChannel.Node2.MinHTLC,
+			MaxHTLC:                   testChannel.Node2.MaxHTLC,
 			FeeBaseMSat:               testChannel.Node2.FeeBaseMsat,
 			FeeProportionalMillionths: testChannel.Node2.FeeRate,
 		}
@@ -543,26 +549,31 @@ func TestFindLowestFeePath(t *testing.T) {
 			Expiry:  144,
 			FeeRate: 400,
 			MinHTLC: 1,
+			MaxHTLC: 100000000,
 		}),
 		symmetricTestChannel("first", "a", 100000, &testChannelPolicy{
 			Expiry:  144,
 			FeeRate: 400,
 			MinHTLC: 1,
+			MaxHTLC: 100000000,
 		}),
 		symmetricTestChannel("a", "target", 100000, &testChannelPolicy{
 			Expiry:  144,
 			FeeRate: 400,
 			MinHTLC: 1,
+			MaxHTLC: 100000000,
 		}),
 		symmetricTestChannel("first", "b", 100000, &testChannelPolicy{
 			Expiry:  144,
 			FeeRate: 100,
 			MinHTLC: 1,
+			MaxHTLC: 100000000,
 		}),
 		symmetricTestChannel("b", "target", 100000, &testChannelPolicy{
 			Expiry:  144,
 			FeeRate: 600,
 			MinHTLC: 1,
+			MaxHTLC: 100000000,
 		}),
 	}
 
