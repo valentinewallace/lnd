@@ -2690,6 +2690,10 @@
           "type": "string",
           "format": "int64"
         },
+        "max_htlc": {
+          "type": "string",
+          "format": "uint64"
+        },
         "fee_base_msat": {
           "type": "string",
           "format": "int64"

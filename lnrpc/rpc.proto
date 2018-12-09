@@ -1475,9 +1475,10 @@ message NodeAddress {
 message RoutingPolicy {
     uint32 time_lock_delta = 1 [json_name = "time_lock_delta"];
     int64 min_htlc = 2 [json_name = "min_htlc"];
-    int64 fee_base_msat = 3 [json_name = "fee_base_msat"];
-    int64 fee_rate_milli_msat = 4 [json_name = "fee_rate_milli_msat"];
-    bool disabled = 5 [json_name = "disabled"];
+    uint64 max_htlc = 3 [json_name = "max_htlc"];
+    int64 fee_base_msat = 4 [json_name = "fee_base_msat"];
+    int64 fee_rate_milli_msat = 5 [json_name = "fee_rate_milli_msat"];
+    bool disabled = 6 [json_name = "disabled"];
 }
 
 /**
