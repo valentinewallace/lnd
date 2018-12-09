@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/btcsuite/btcd/wire"
+	"github.com/btcsuite/btcutil"
 	"github.com/lightningnetwork/lnd/channeldb"
 	"github.com/lightningnetwork/lnd/htlcswitch"
 
@@ -1035,10 +1036,12 @@ func TestAddEdgeUnknownVertexes(t *testing.T) {
 		t.Fatalf("unable to create router: %v", err)
 	}
 
-	var pub1 [33]byte
+	var (
+		pub1       [33]byte
+		pub2       [33]byte
+		chanCapSat = btcutil.Amount(10000)
+	)
 	copy(pub1[:], priv1.PubKey().SerializeCompressed())
-
-	var pub2 [33]byte
 	copy(pub2[:], priv2.PubKey().SerializeCompressed())
 
 	// The two nodes we are about to add should not exist yet.
@@ -1062,7 +1065,7 @@ func TestAddEdgeUnknownVertexes(t *testing.T) {
 	fundingTx, _, chanID, err := createChannelEdge(ctx,
 		bitcoinKey1.SerializeCompressed(),
 		bitcoinKey2.SerializeCompressed(),
-		10000, 500)
+		chanCapSat, 500)
 	if err != nil {
 		t.Fatalf("unable to create channel edge: %v", err)
 	}
@@ -1092,6 +1095,7 @@ func TestAddEdgeUnknownVertexes(t *testing.T) {
 		LastUpdate:                testTime,
 		TimeLockDelta:             10,
 		MinHTLC:                   1,
+		MaxHTLC:                   lnwire.NewMSatFromSatoshis(chanCapSat),
 		FeeBaseMSat:               10,
 		FeeProportionalMillionths: 10000,
 	}
@@ -1108,6 +1112,7 @@ func TestAddEdgeUnknownVertexes(t *testing.T) {
 		LastUpdate:                testTime,
 		TimeLockDelta:             10,
 		MinHTLC:                   1,
+		MaxHTLC:                   lnwire.NewMSatFromSatoshis(chanCapSat),
 		FeeBaseMSat:               10,
 		FeeProportionalMillionths: 10000,
 	}
@@ -1160,7 +1165,7 @@ func TestAddEdgeUnknownVertexes(t *testing.T) {
 
 	fundingTx, _, chanID, err = createChannelEdge(ctx,
 		pubKey1.SerializeCompressed(), pubKey2.SerializeCompressed(),
-		10000, 510)
+		chanCapSat, 510)
 	if err != nil {
 		t.Fatalf("unable to create channel edge: %v", err)
 	}
@@ -1188,6 +1193,7 @@ func TestAddEdgeUnknownVertexes(t *testing.T) {
 		LastUpdate:                testTime,
 		TimeLockDelta:             10,
 		MinHTLC:                   1,
+		MaxHTLC:                   lnwire.NewMSatFromSatoshis(chanCapSat),
 		FeeBaseMSat:               10,
 		FeeProportionalMillionths: 10000,
 	}
@@ -1203,6 +1209,7 @@ func TestAddEdgeUnknownVertexes(t *testing.T) {
 		LastUpdate:                testTime,
 		TimeLockDelta:             10,
 		MinHTLC:                   1,
+		MaxHTLC:                   lnwire.NewMSatFromSatoshis(chanCapSat),
 		FeeBaseMSat:               10,
 		FeeProportionalMillionths: 10000,
 	}
@@ -2046,8 +2053,9 @@ func TestIsStaleEdgePolicy(t *testing.T) {
 	// First, we'll create a new channel edge (just the info) and insert it
 	// into the database.
 	var (
-		pub1 [33]byte
-		pub2 [33]byte
+		pub1       [33]byte
+		pub2       [33]byte
+		chanCapSat = btcutil.Amount(10000)
 	)
 	copy(pub1[:], priv1.PubKey().SerializeCompressed())
 	copy(pub2[:], priv2.PubKey().SerializeCompressed())
@@ -2055,7 +2063,7 @@ func TestIsStaleEdgePolicy(t *testing.T) {
 	fundingTx, _, chanID, err := createChannelEdge(ctx,
 		bitcoinKey1.SerializeCompressed(),
 		bitcoinKey2.SerializeCompressed(),
-		10000, 500)
+		chanCapSat, 500)
 	if err != nil {
 		t.Fatalf("unable to create channel edge: %v", err)
 	}
@@ -2093,6 +2101,7 @@ func TestIsStaleEdgePolicy(t *testing.T) {
 		LastUpdate:                updateTimeStamp,
 		TimeLockDelta:             10,
 		MinHTLC:                   1,
+		MaxHTLC:                   lnwire.NewMSatFromSatoshis(chanCapSat),
 		FeeBaseMSat:               10,
 		FeeProportionalMillionths: 10000,
 	}
@@ -2107,6 +2116,7 @@ func TestIsStaleEdgePolicy(t *testing.T) {
 		LastUpdate:                updateTimeStamp,
 		TimeLockDelta:             10,
 		MinHTLC:                   1,
+		MaxHTLC:                   lnwire.NewMSatFromSatoshis(chanCapSat),
 		FeeBaseMSat:               10,
 		FeeProportionalMillionths: 10000,
 	}
