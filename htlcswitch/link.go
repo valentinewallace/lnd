@@ -1869,6 +1869,9 @@ func (l *channelLink) UpdateForwardingPolicy(newPolicy ForwardingPolicy) {
 	if newPolicy.MinHTLC != 0 {
 		l.cfg.FwrdingPolicy.MinHTLC = newPolicy.MinHTLC
 	}
+	if newPolicy.MaxHTLC != 0 {
+		l.cfg.FwrdingPolicy.MaxHTLC = newPolicy.MaxHTLC
+	}
 }
 
 // HtlcSatifiesPolicy should return a nil error if the passed HTLC details

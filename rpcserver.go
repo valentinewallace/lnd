@@ -4549,6 +4549,7 @@ func (r *rpcServer) UpdateChannelPolicy(ctx context.Context,
 		BaseFee:       baseFeeMsat,
 		FeeRate:       lnwire.MilliSatoshi(feeRateFixed),
 		TimeLockDelta: req.TimeLockDelta,
+		MaxHTLC:       lnwire.MilliSatoshi(req.MaxHtlcMsat),
 	}
 	err = r.server.htlcSwitch.UpdateForwardingPolicies(p, targetChans...)
 	if err != nil {
