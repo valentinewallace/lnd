@@ -931,6 +931,15 @@ type expectedChanUpdate struct {
 	chanPoint       *lnrpc.ChannelPoint
 }
 
+// calculateMaxHtlc re-implements the RequiredRemoteChannelReserve of the
+// funding manager's config, which corresponds to the maximum MaxHTLC value we
+// allow users to set when updating a channel policy.
+func calculateMaxHtlc(chanCap btcutil.Amount) uint64 {
+	reserve := lnwire.NewMSatFromSatoshis(chanCap / 100)
+	max := lnwire.NewMSatFromSatoshis(chanCap) - reserve
+	return uint64(max)
+}
+
 // waitForChannelUpdate waits for a node to receive the expected channel
 // updates.
 func waitForChannelUpdate(t *harnessTest, subscription graphSubscription,
@@ -1065,6 +1074,10 @@ func checkChannelPolicy(policy, expectedPolicy *lnrpc.RoutingPolicy) error {
 	if policy.MinHtlc != expectedPolicy.MinHtlc {
 		return fmt.Errorf("expected min htlc %v, got %v",
 			expectedPolicy.MinHtlc, policy.MinHtlc)
+	}
+	if policy.MaxHtlc != expectedPolicy.MaxHtlc {
+		return fmt.Errorf("expected max htlc %v, got %v",
+			expectedPolicy.MaxHtlc, policy.MaxHtlc)
 	}
 	if policy.Disabled != expectedPolicy.Disabled {
 		return errors.New("edge should be disabled but isn't")
@@ -3447,7 +3460,7 @@ func assertAmountPaid(t *harnessTest, ctxb context.Context, channelName string,
 // listenerNode has received the policy update.
 func updateChannelPolicy(t *harnessTest, node *lntest.HarnessNode,
 	chanPoint *lnrpc.ChannelPoint, baseFee int64, feeRate int64,
-	timeLockDelta uint32, listenerNode *lntest.HarnessNode) {
+	timeLockDelta uint32, maxHtlc uint64, listenerNode *lntest.HarnessNode) {
 
 	ctxb := context.Background()
 
@@ -3456,6 +3469,7 @@ func updateChannelPolicy(t *harnessTest, node *lntest.HarnessNode,
 		FeeRateMilliMsat: feeRate,
 		TimeLockDelta:    timeLockDelta,
 		MinHtlc:          1000, // default value
+		MaxHtlc:          maxHtlc,
 	}
 
 	updateFeeReq := &lnrpc.PolicyUpdateRequest{
@@ -3465,6 +3479,7 @@ func updateChannelPolicy(t *harnessTest, node *lntest.HarnessNode,
 		Scope: &lnrpc.PolicyUpdateRequest_ChanPoint{
 			ChanPoint: chanPoint,
 		},
+		MaxHtlcMsat: maxHtlc,
 	}
 
 	ctxt, _ := context.WithTimeout(ctxb, defaultTimeout)
@@ -3652,10 +3667,10 @@ func testMultiHopPayments(net *lntest.NetworkHarness, t *harnessTest) {
 	// channel edges to relatively large non default values. This makes it
 	// possible to pick up more subtle fee calculation errors.
 	updateChannelPolicy(t, net.Alice, chanPointAlice, 1000, 100000,
-		144, carol)
+		144, uint64(calculateMaxHtlc(chanAmt)), carol)
 
 	updateChannelPolicy(t, dave, chanPointDave, 5000, 150000,
-		144, carol)
+		144, uint64(calculateMaxHtlc(chanAmt)), carol)
 
 	// Using Carol as the source, pay to the 5 invoices from Bob created
 	// above.
@@ -11819,18 +11834,21 @@ func testRouteFeeCutoff(net *lntest.NetworkHarness, t *harnessTest) {
 	baseFee := int64(10000)
 	feeRate := int64(5)
 	timeLockDelta := uint32(144)
+	maxHtlc := calculateMaxHtlc(chanAmt)
 
 	expectedPolicy := &lnrpc.RoutingPolicy{
 		FeeBaseMsat:      baseFee,
 		FeeRateMilliMsat: testFeeBase * feeRate,
 		TimeLockDelta:    timeLockDelta,
 		MinHtlc:          1000, // default value
+		MaxHtlc:          maxHtlc,
 	}
 
 	updateFeeReq := &lnrpc.PolicyUpdateRequest{
 		BaseFeeMsat:   baseFee,
 		FeeRate:       float64(feeRate),
 		TimeLockDelta: timeLockDelta,
+		MaxHtlcMsat:   maxHtlc,
 		Scope: &lnrpc.PolicyUpdateRequest_ChanPoint{
 			ChanPoint: chanPointCarolDave,
 		},
@@ -12065,6 +12083,7 @@ func testSendUpdateDisableChannel(net *lntest.NetworkHarness, t *harnessTest) {
 		FeeRateMilliMsat: int64(defaultBitcoinFeeRate),
 		TimeLockDelta:    defaultBitcoinTimeLockDelta,
 		MinHtlc:          1000, // default value
+		MaxHtlc:          calculateMaxHtlc(chanAmt),
 		Disabled:         true,
 	}
 
