@@ -892,6 +892,7 @@ func newThreeHopNetwork(t testing.TB, aliceChannel, firstBobChannel,
 		MinHTLC:       lnwire.NewMSatFromSatoshis(5),
 		BaseFee:       lnwire.NewMSatFromSatoshis(1),
 		TimeLockDelta: defaultDelta,
+		MaxHTLC:       aliceChannel.MaxPendingAmount(),
 	}
 	obfuscator := NewMockObfuscator()
 
@@ -938,6 +939,7 @@ func newThreeHopNetwork(t testing.TB, aliceChannel, firstBobChannel,
 		}
 	}()
 
+	globalPolicy.MaxHTLC = firstBobChannel.MaxPendingAmount()
 	firstBobChannelLink := NewChannelLink(
 		ChannelLinkConfig{
 			Switch:             bobServer.htlcSwitch,
@@ -981,6 +983,7 @@ func newThreeHopNetwork(t testing.TB, aliceChannel, firstBobChannel,
 		}
 	}()
 
+	globalPolicy.MaxHTLC = secondBobChannel.MaxPendingAmount()
 	secondBobChannelLink := NewChannelLink(
 		ChannelLinkConfig{
 			Switch:             bobServer.htlcSwitch,
@@ -1024,6 +1027,7 @@ func newThreeHopNetwork(t testing.TB, aliceChannel, firstBobChannel,
 		}
 	}()
 
+	globalPolicy.MaxHTLC = carolChannel.MaxPendingAmount()
 	carolChannelLink := NewChannelLink(
 		ChannelLinkConfig{
 			Switch:             carolServer.htlcSwitch,
