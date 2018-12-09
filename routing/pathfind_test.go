@@ -1439,6 +1439,86 @@ func TestRouteFailMinHTLC(t *testing.T) {
 	}
 }
 
+// TestRouteFailMaxHTLC tests that if we attempt to route an HTLC which is
+// larger than the advertised max HTLC of an edge, then path finding fails.
+func TestRouteFailMaxHTLC(t *testing.T) {
+	t.Parallel()
+
+	graph, err := parseTestGraph(basicGraphFilePath)
+	defer graph.cleanUp()
+	if err != nil {
+		t.Fatalf("unable to create graph: %v", err)
+	}
+
+	sourceNode, err := graph.graph.SourceNode()
+	if err != nil {
+		t.Fatalf("unable to fetch source node: %v", err)
+	}
+	ignoredEdges := make(map[edgeLocator]struct{})
+	ignoredVertexes := make(map[Vertex]struct{})
+
+	// First, attempt to send a payment greater than the max HTLC we are about
+	// to set, which should succeed.
+	target := graph.aliasMap["elst"]
+	payAmt := lnwire.MilliSatoshi(100001)
+	_, err = findPath(
+		&graphParams{
+			graph: graph.graph,
+		},
+		&restrictParams{
+			ignoredNodes: ignoredVertexes,
+			ignoredEdges: ignoredEdges,
+			feeLimit:     noFeeLimit,
+		},
+		sourceNode, target, payAmt,
+	)
+	if err != nil {
+		t.Fatalf("graph should've been able to support payment: %v", err)
+	}
+
+	// Next, update the elst edge policy to only allow payments up to 100k msat.
+	_, _, elstEdge, err := graph.graph.FetchChannelEdgesByID(15433)
+	elstEdge.MaxHTLC = 100000
+	if err := graph.graph.UpdateEdgePolicy(elstEdge); err != nil {
+		t.Fatalf("unable to update edge: %v", err)
+	}
+
+	// Now, if we attempt to route through that edge with a payment above 100k
+	// msat, we should get a faiure.
+	payAmt = lnwire.MilliSatoshi(100001)
+	_, err = findPath(
+		&graphParams{
+			graph: graph.graph,
+		},
+		&restrictParams{
+			ignoredNodes: ignoredVertexes,
+			ignoredEdges: ignoredEdges,
+			feeLimit:     noFeeLimit,
+		},
+		sourceNode, target, payAmt,
+	)
+	if !IsError(err, ErrNoPathFound) {
+		t.Fatalf("graph shouldn't be able to support payment: %v", err)
+	}
+
+	// A payment of exactly the max HTLC should succeed.
+	payAmt = lnwire.MilliSatoshi(100000)
+	_, err = findPath(
+		&graphParams{
+			graph: graph.graph,
+		},
+		&restrictParams{
+			ignoredNodes: ignoredVertexes,
+			ignoredEdges: ignoredEdges,
+			feeLimit:     noFeeLimit,
+		},
+		sourceNode, target, payAmt,
+	)
+	if err != nil {
+		t.Fatalf("graph should've been able to support payment: %v", err)
+	}
+}
+
 // TestRouteFailDisabledEdge tests that if we attempt to route to an edge
 // that's disabled, then that edge is disqualified, and the routing attempt
 // will fail. We also test that this is true only for non-local edges, as we'll
