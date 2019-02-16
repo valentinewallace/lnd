@@ -282,6 +282,8 @@ func parseTestGraph(path string) (*testGraphInstance, error) {
 			FeeBaseMSat:               lnwire.MilliSatoshi(edge.FeeBaseMsat),
 			FeeProportionalMillionths: lnwire.MilliSatoshi(edge.FeeRate),
 		}
+		fmt.Printf("parseTestGraph: edge policy message flags being added: %v\n", edgePolicy.MessageFlags)
+		fmt.Printf("parseTestGraph: edge policy channel flags being added: %v\n", edgePolicy.ChannelFlags)
 		if err := graph.UpdateEdgePolicy(edgePolicy); err != nil {
 			return nil, err
 		}
@@ -1481,6 +1483,7 @@ func TestRouteFailMaxHTLC(t *testing.T) {
 
 	// Next, update the elst edge policy to only allow payments up to 100k msat.
 	_, _, elstEdge, err := graph.graph.FetchChannelEdgesByID(15433)
+	elstEdge.MessageFlags = 1
 	elstEdge.MaxHTLC = 100000
 	if err := graph.graph.UpdateEdgePolicy(elstEdge); err != nil {
 		t.Fatalf("unable to update edge: %v", err)

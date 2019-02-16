@@ -3467,6 +3467,8 @@ func deserializeChanEdgePolicy(r io.Reader,
 	}
 
 	// See if optional fields are present.
+	fmt.Printf("deserializeChanEdgePolicy: edge.MessageFlags.HasMaxHtlc(): %v\n", edge.MessageFlags.HasMaxHtlc())
+	fmt.Printf("deserializeChanEdgePolicy: edge.MessageFlags: %v\n", edge.MessageFlags)
 	if edge.MessageFlags.HasMaxHtlc() {
 		// The max_htlc field should be at the beginning of the opaque
 		// bytes.

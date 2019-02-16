@@ -579,6 +579,7 @@ func findPath(g *graphParams, r *restrictParams,
 		// If this edge was constructed from a hop hint, we won't have access to
 		// its max HTLC. Therefore, only consider discarding this edge here if
 		// the field is set.
+		fmt.Printf("in findPath, edge.MaHTLC: %v, amountToSend: %v\n", edge.MaxHTLC, amountToSend)
 		if edge.MaxHTLC != 0 && edge.MaxHTLC < amountToSend {
 			return
 		}
