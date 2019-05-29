@@ -28,6 +28,8 @@ import (
 	"github.com/btcsuite/btcwallet/wallet/txauthor"
 	"github.com/coreos/bbolt"
 	"github.com/davecgh/go-spew/spew"
+	"github.com/grpc-ecosystem/go-grpc-middleware"
+	"github.com/grpc-ecosystem/go-grpc-prometheus"
 	proxy "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/lightningnetwork/lnd/autopilot"
 	"github.com/lightningnetwork/lnd/build"
@@ -45,6 +47,7 @@ import (
 	"github.com/lightningnetwork/lnd/lnwallet"
 	"github.com/lightningnetwork/lnd/lnwire"
 	"github.com/lightningnetwork/lnd/macaroons"
+	"github.com/lightningnetwork/lnd/monitoring"
 	"github.com/lightningnetwork/lnd/routing"
 	"github.com/lightningnetwork/lnd/signal"
 	"github.com/lightningnetwork/lnd/sweep"
@@ -531,17 +534,33 @@ func newRPCServer(s *server, macService *macaroons.Service,
 
 	// If macaroons aren't disabled (a non-nil service), then we'll set up
 	// our set of interceptors which will allow us handle the macaroon
-	// authentication in a single location .
-	if macService != nil {
-		unaryInterceptor := grpc.UnaryInterceptor(
+	// authentication in a single location. If monitoring is enabled, we'll
+	// also set up interceptors for the Prometheus exporter. If both are
+	// enabled, we'll chain the interceptors together.
+	var unaryInterceptor grpc.UnaryServerInterceptor
+	var streamInterceptor grpc.StreamServerInterceptor
+	switch {
+	case macService != nil && monitoring.Enabled:
+		unaryInterceptor = grpc_middleware.ChainUnaryServer(
 			macService.UnaryServerInterceptor(permissions),
+			grpc_prometheus.UnaryServerInterceptor,
 		)
-		streamInterceptor := grpc.StreamInterceptor(
+		streamInterceptor = grpc_middleware.ChainStreamServer(
 			macService.StreamServerInterceptor(permissions),
+			grpc_prometheus.StreamServerInterceptor,
 		)
+	case macService != nil:
+		unaryInterceptor = macService.UnaryServerInterceptor(permissions)
+		streamInterceptor = macService.StreamServerInterceptor(permissions)
+	case monitoring.Enabled:
+		unaryInterceptor = grpc_prometheus.UnaryServerInterceptor
+		streamInterceptor = grpc_prometheus.StreamServerInterceptor
+	}
 
+	if unaryInterceptor != nil && streamInterceptor != nil {
 		serverOpts = append(serverOpts,
-			unaryInterceptor, streamInterceptor,
+			grpc.UnaryInterceptor(unaryInterceptor),
+			grpc.StreamInterceptor(streamInterceptor),
 		)
 	}
 
@@ -613,6 +632,11 @@ func (r *rpcServer) Start() error {
 			rpcsLog.Infof("RPC server listening on %s", lis.Addr())
 			r.grpcServer.Serve(lis)
 		}()
+	}
+
+	// If monitoring is enabled, start the Prometheus exporter.
+	if monitoring.Enabled {
+		monitoring.Start(r.grpcServer, cfg.Prometheus.ListenAddr)
 	}
 
 	// Finally, start the REST proxy for our gRPC server above. We'll ensure

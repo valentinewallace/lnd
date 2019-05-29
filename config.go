@@ -29,6 +29,7 @@ import (
 	"github.com/lightningnetwork/lnd/lncfg"
 	"github.com/lightningnetwork/lnd/lnrpc/signrpc"
 	"github.com/lightningnetwork/lnd/lnwire"
+	"github.com/lightningnetwork/lnd/monitoring"
 	"github.com/lightningnetwork/lnd/routing"
 	"github.com/lightningnetwork/lnd/tor"
 )
@@ -307,6 +308,8 @@ type config struct {
 	Workers *lncfg.Workers `group:"workers" namespace:"workers"`
 
 	Caches *lncfg.Caches `group:"caches" namespace:"caches"`
+
+	Prometheus *monitoring.PrometheusConfig `group:"prometheus" namespace:"prometheus"`
 }
 
 // loadConfig initializes and parses the config using a config file and command
